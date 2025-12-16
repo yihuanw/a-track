@@ -1,0 +1,16 @@
+#leftPanel {
+    background-color: #313131;
+    padding: 20px;
+}
+
+#rightPanel {
+    background-color: #202020;
+}
+
+#leftPanel QLabel#headerLabel {
+    color: #b398a5;
+    font-size: 45px;
+    font-family: "Inter";
+    font-weight: bold;
+    padding: 40px;
+}
