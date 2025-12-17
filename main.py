@@ -1,7 +1,7 @@
 import sys
 import os
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtGui import QFontDatabase
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtGui import QFontDatabase
 from ui import MainWindow
 
 app = QApplication(sys.argv)
@@ -20,9 +20,12 @@ with open(qss_path, "r", encoding="utf-8") as f:
     app.setStyleSheet(f.read())
 
 # apply font
-font_path = os.path.join(base_path, "assets/Inter/Inter-VariableFont_opsz,wght.ttf")
+font_path = os.path.join(
+    base_path,
+    "assets/Inter/Inter-VariableFont_opsz,wght.ttf"
+)
 QFontDatabase.addApplicationFont(font_path)
 
 window.showMaximized()
 
-sys.exit(app.exec_())
+sys.exit(app.exec())

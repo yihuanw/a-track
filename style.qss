@@ -8,9 +8,28 @@
 }
 
 #leftPanel QLabel#headerLabel {
-    color: #b398a5;
-    font-size: 45px;
+    color: #b39ba5;
+    font-size: 22px;
     font-family: "Inter";
     font-weight: bold;
-    padding: 40px;
+    padding-top: 20px;
+}
+
+QPushButton {
+    background-color: #4b4648;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 60px;
+}
+
+QPushButton QLabel {
+    color: #ebe6e8;
+    font-size: 14px;
+    font-family: "Inter";
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+QPushButton:hover {
+    background-color: #473e43
 }
