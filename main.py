@@ -5,7 +5,6 @@ from PyQt6.QtGui import QFontDatabase
 from ui import MainWindow
 
 app = QApplication(sys.argv)
-
 window = MainWindow()
 
 # pyinstaller

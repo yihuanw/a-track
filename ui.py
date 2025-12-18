@@ -3,7 +3,15 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
-import logic
+import logic, sys, os
+
+# path helper
+def path(*paths):
+    if getattr(sys, "frozen", False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(__file__)
+    return os.path.join(base, *paths)
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -11,6 +19,7 @@ class MainWindow(QWidget):
 
         # window bar
         self.setWindowTitle("Assignment Tracker")
+        self.setWindowIcon(QIcon(path("assets", "icon", "logo.png")))
 
         # panels
         self.left = QWidget()
@@ -38,9 +47,9 @@ class MainWindow(QWidget):
         button_layout.setContentsMargins(0, 0, 0, 0)
 
         # buttons
-        btn_cal = IconTextButton("assets/icon/calendar.png", "calendar")
-        btn_tasks = IconTextButton("assets/icon/tasks.png", "tasks")
-        btn_prof = IconTextButton("assets/icon/profile.png", "profile")
+        btn_cal = IconTextButton(path("assets", "icon", "calendar.png"), "calendar")
+        btn_tasks = IconTextButton(path("assets", "icon", "tasks.png"), "tasks")
+        btn_prof = IconTextButton(path("assets", "icon", "profile.png"), "profile")
 
         btn_cal.clicked.connect(logic.on_cal_clicked)
         btn_tasks.clicked.connect(logic.on_tasks_clicked)
@@ -69,9 +78,8 @@ class IconTextButton(QPushButton):
     def __init__(self, icon_path, text):
         super().__init__()
 
-        # remove default text/icon
+        # remove default text
         self.setText("")
-        self.setIcon(QIcon())
 
         # layout inside button
         layout = QHBoxLayout(self)
@@ -80,7 +88,9 @@ class IconTextButton(QPushButton):
 
         # icon label
         icon_label = QLabel()
-        icon_label.setPixmap(QIcon(icon_path).pixmap(24, 24))
+        icon = QIcon(icon_path)
+        size = int(self.font().pointSize() * 2.5)
+        icon_label.setPixmap(icon.pixmap(size, size))
         icon_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         icon_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         layout.addWidget(icon_label)
