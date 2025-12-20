@@ -1,7 +1,12 @@
-from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout
+from PyQt6.QtWidgets import (
+    QWidget, QLabel, QVBoxLayout, QHBoxLayout, QStackedWidget, QSizePolicy
+)
 from PyQt6.QtGui import QIcon, QGuiApplication
 from PyQt6.QtCore import Qt
-import layout, logic, os, sys
+
+from interface import layout
+import logic, os, sys
+from interface.tasks import TasksPanel
 
 def path(*paths):
     if getattr(sys, "frozen", False):
@@ -48,6 +53,21 @@ class MainWindow(QWidget):
         btn_prof.clicked.connect(logic.on_prof_clicked)
 
         left_layout.addStretch()
+
+        # right layout
+        right_layout = QVBoxLayout(self.right)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(0)
+
+        # stacked widget
+        stacked_widget = QStackedWidget()
+        stacked_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding
+        )   
+        tasks_panel = TasksPanel()
+        stacked_widget.addWidget(tasks_panel)
+        right_layout.addWidget(stacked_widget)
 
         # horizontal split
         split_layout = QHBoxLayout()

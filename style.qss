@@ -29,5 +29,15 @@ QPushButton QLabel {
 }
 
 QPushButton:hover {
-    background-color: #473e43
+    background-color: #473e43;
+}
+
+#tasks_leftRect {
+    background-color: #3e393b;
+    border-radius: 10px;
+}
+
+#tasks_rightRect {
+    border: 1px solid #ebe6e8;
+    border-radius: 10px;
 }
