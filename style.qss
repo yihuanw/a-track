@@ -7,7 +7,7 @@
     background-color: #202020;
 }
 
-#leftPanel QLabel#headerLabel {
+#headerLabel {
     color: #b39ba5;
     font-family: "Inter";
     font-weight: bold;
@@ -40,4 +40,21 @@ QPushButton:hover {
 #tasks_rightRect {
     border: 1px solid #ebe6e8;
     border-radius: 10px;
+}
+
+#tasks_header {
+    color: #ebe6e8;
+    font-family: "Inter";
+    font-weight: bold;
+    padding: 10px;
+}
+
+QListWidget {
+    background: transparent;
+    border: none;
+    color: #ebe6e8;
+    font-family: "Inter";
+    font-weight: 600;
+    padding-left: 10px;
+    padding-right: 10px;
 }

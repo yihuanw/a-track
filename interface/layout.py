@@ -18,10 +18,10 @@ def scale_font_to_width(widget, text, target_width):
     return font
 
 
-# scales header size
-def scale_header(header_label, left_width):
-    target_width = int(left_width * 0.70)  # 70% of panel
-    header_label.setFont(scale_font_to_width(header_label, header_label.text(), target_width))
+# scales text size
+def scale_text(text_label, width, percent = 0.7):
+    target_width = int(width * percent) 
+    text_label.setFont(scale_font_to_width(text_label, text_label.text(), target_width))
 
 
 # icon & text button
@@ -54,7 +54,7 @@ class IconTextButton(QPushButton):
 
 
 # scales button text based on the longest label
-def scale_buttons(buttons, left_width, header_width):
+def scale_buttons(buttons, left_width):
     if not buttons:
         return
 

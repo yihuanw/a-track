@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import (
-    QWidget, QLabel, QVBoxLayout, QHBoxLayout, QStackedWidget, QSizePolicy
+    QWidget, QLabel, QHBoxLayout, QVBoxLayout, QStackedWidget, QSizePolicy
 )
 from PyQt6.QtGui import QIcon, QGuiApplication
 from PyQt6.QtCore import Qt
@@ -84,6 +84,5 @@ class MainWindow(QWidget):
         screen_width = QGuiApplication.primaryScreen().geometry().width()
         left_width = screen_width // 6  # left panel = 1/6 screen width
 
-        layout.scale_header(self.header, left_width)
-        header_width = self.header.sizeHint().width()
-        layout.scale_buttons(self.buttons, left_width, header_width)
+        layout.scale_text(self.header, left_width)
+        layout.scale_buttons(self.buttons, left_width)
