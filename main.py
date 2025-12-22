@@ -5,6 +5,7 @@ from PyQt6.QtGui import QFontDatabase
 from ui import MainWindow
 
 app = QApplication(sys.argv)
+app.setStyle("windows11")
 window = MainWindow()
 
 # pyinstaller

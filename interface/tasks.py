@@ -1,8 +1,9 @@
 from PyQt6.QtWidgets import (
-    QWidget, QLabel, QHBoxLayout, QVBoxLayout, QListWidget
+    QWidget, QLabel, QHBoxLayout, QVBoxLayout, QListWidget, QLineEdit, QListWidgetItem, 
+    QStyledItemDelegate, QStyle
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtGui import QGuiApplication, QPainter, QColor
 from . import layout
 
 class TasksPanel(QWidget):
@@ -42,11 +43,20 @@ class TasksPanel(QWidget):
         # scrollable list
         folder_list = QListWidget()
         folder_list.setFixedHeight(int((rect_height - header_height - 50)))
-        folder_list.addItems(["all", "folder 1", "folder 2", "folder 3", "uncategorized"])
+        folder_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+
+        folders = ["all", "folder 1", "folder 2", "folder 3", "uncategorized"]
+        colors = [Qt.GlobalColor.transparent, "#929FCA", "#B39BA5", "#BDD2C0", Qt.GlobalColor.transparent]
+
+        for folder in folders:
+            item = QListWidgetItem(folder)
+            folder_list.addItem(item)
 
         font = header.font()
         font.setPointSize(int(font.pointSize() * 0.75))
         folder_list.setFont(font)
+
+        folder_list.setItemDelegate(circleDelegate(colors, folder_list))
         left_layout.addWidget(folder_list)
 
         # right rectangle
@@ -54,5 +64,52 @@ class TasksPanel(QWidget):
         self.right_rect.setFixedSize(right_width, rect_height)
         self.right_rect.setObjectName("tasks_rightRect")
 
+        right_layout = QVBoxLayout(self.right_rect)
+        right_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        # add task input
+        add_task_input = QLineEdit()
+        add_task_input.setPlaceholderText("add task")
+        add_task_input.setFixedHeight(header_height)
+        add_task_input.setFixedWidth(int(right_width * 0.9))
+        add_task_input.setObjectName("tasks_addTaskInput")
+
+        right_layout.addWidget(add_task_input, alignment=Qt.AlignmentFlag.AlignCenter)
+
         main_layout.addWidget(self.left_rect)
         main_layout.addWidget(self.right_rect)
+
+# delegate for bullet circles
+class circleDelegate(QStyledItemDelegate):
+    def __init__(self, colors, parent=None):
+        super().__init__(parent)
+        self.colors = colors
+
+    def paint(self, painter, option, index):
+        row = index.row()
+        if row >= len(self.colors):
+            return
+
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Draw the background according to the QSS
+        style = option.widget.style() if option.widget else None
+        if style:
+            style.drawPrimitive(QStyle.PrimitiveElement.PE_PanelItemViewItem, option, painter, option.widget)
+
+        # circle
+        radius = option.rect.height() * 0.15
+        padding = option.rect.height() * 0.15  # 15% of item height
+        center_x = option.rect.left() + radius + padding
+        center_y = option.rect.center().y()
+        painter.setBrush(QColor(self.colors[row]))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(int(center_x - radius), int(center_y - radius), int(2*radius), int(2*radius))
+
+        # text
+        text_rect = option.rect.adjusted(int(2*radius + 10), 0, 0, 0)
+        painter.setPen(option.palette.color(option.palette.ColorRole.Text))
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, index.data())
+
+        painter.restore()

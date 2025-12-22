@@ -51,10 +51,19 @@ QPushButton:hover {
 
 QListWidget {
     background: transparent;
-    border: none;
+    border: 0;
     color: #ebe6e8;
     font-family: "Inter";
     font-weight: 600;
-    padding-left: 10px;
+    padding-left: 20px;
     padding-right: 10px;
+}
+
+QListWidget::item {
+    border: 0;
+    border-radius: 10px;
+}
+
+QListWidget::item:selected {
+    background-color: #382f33;
 }
