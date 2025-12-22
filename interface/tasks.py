@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (
     QWidget, QLabel, QHBoxLayout, QVBoxLayout, QListWidget, QLineEdit, QListWidgetItem, 
-    QStyledItemDelegate, QStyle
+    QStyledItemDelegate, QStyle, QSizePolicy
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QGuiApplication, QPainter, QColor
@@ -36,9 +36,12 @@ class TasksPanel(QWidget):
         header = QLabel("FOLDERS")
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header.setObjectName("tasks_header")
-        left_layout.addWidget(header)
+
+        header.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         layout.scale_text(header, int(left_width * 0.6), 0.7)
         header_height = header.sizeHint().height()
+
+        left_layout.addWidget(header)
 
         # scrollable list
         folder_list = QListWidget()
@@ -66,11 +69,13 @@ class TasksPanel(QWidget):
 
         right_layout = QVBoxLayout(self.right_rect)
         right_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        left, top, right, bottom = right_layout.getContentsMargins()
+        right_layout.setContentsMargins(left, int(header_height // 2), right, bottom)
 
         # add task input
         add_task_input = QLineEdit()
         add_task_input.setPlaceholderText("add task")
-        add_task_input.setFixedHeight(header_height)
+        add_task_input.setFixedHeight(int(header_height * 1.5))
         add_task_input.setFixedWidth(int(right_width * 0.9))
         add_task_input.setObjectName("tasks_addTaskInput")
 

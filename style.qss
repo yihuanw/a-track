@@ -67,3 +67,13 @@ QListWidget::item {
 QListWidget::item:selected {
     background-color: #382f33;
 }
+
+#tasks_addTaskInput {
+    background-color: #382f33;
+    color: #ebe6e8;
+    font-family: "Inter";
+    font-weight: 500;
+    padding-left: 10px;
+    border: 0;
+    border-radius: 10px;
+}
