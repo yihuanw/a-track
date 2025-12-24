@@ -36,8 +36,6 @@ class TasksPanel(QWidget):
         header = QLabel("FOLDERS")
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header.setObjectName("tasks_header")
-
-        header.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         layout.scale_text(header, int(left_width * 0.6), 0.7)
         header_height = header.sizeHint().height()
 
@@ -78,6 +76,7 @@ class TasksPanel(QWidget):
         add_task_input.setFixedHeight(int(header_height * 1.5))
         add_task_input.setFixedWidth(int(right_width * 0.9))
         add_task_input.setObjectName("tasks_addTaskInput")
+        add_task_input.setFont(font)
 
         right_layout.addWidget(add_task_input, alignment=Qt.AlignmentFlag.AlignCenter)
 
@@ -98,7 +97,7 @@ class circleDelegate(QStyledItemDelegate):
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Draw the background according to the QSS
+        # draw the background according to the QSS
         style = option.widget.style() if option.widget else None
         if style:
             style.drawPrimitive(QStyle.PrimitiveElement.PE_PanelItemViewItem, option, painter, option.widget)
@@ -113,7 +112,7 @@ class circleDelegate(QStyledItemDelegate):
         painter.drawEllipse(int(center_x - radius), int(center_y - radius), int(2*radius), int(2*radius))
 
         # text
-        text_rect = option.rect.adjusted(int(2*radius + 10), 0, 0, 0)
+        text_rect = option.rect.adjusted(int(5*radius), 0, 0, 0)
         painter.setPen(option.palette.color(option.palette.ColorRole.Text))
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, index.data())
 
