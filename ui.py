@@ -1,6 +1,4 @@
-from PyQt6.QtWidgets import (
-    QWidget, QLabel, QHBoxLayout, QVBoxLayout, QStackedWidget, QSizePolicy
-)
+from PyQt6.QtWidgets import *
 from PyQt6.QtGui import QIcon, QGuiApplication
 from PyQt6.QtCore import Qt
 
@@ -8,20 +6,13 @@ from interface import layout
 import logic, os, sys
 from interface.tasks import TasksPanel
 
-def path(*paths):
-    if getattr(sys, "frozen", False):
-        base = sys._MEIPASS
-    else:
-        base = os.path.dirname(__file__)
-    return os.path.join(base, *paths)
-
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
 
         # window bar
         self.setWindowTitle("Assignment Tracker")
-        self.setWindowIcon(QIcon(path("assets/icon/logo.png")))
+        self.setWindowIcon(QIcon(logic.path("assets/icon/logo.png")))
 
         # panels
         self.left = QWidget()
@@ -40,9 +31,9 @@ class MainWindow(QWidget):
         left_layout.addWidget(self.header, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         # buttons
-        btn_cal = layout.IconTextButton(path("assets/icon/calendar.png"), "calendar")
-        btn_tasks = layout.IconTextButton(path("assets/icon/tasks.png"), "tasks")
-        btn_prof = layout.IconTextButton(path("assets/icon/profile.png"), "profile")
+        btn_cal = layout.IconTextButton(logic.path("assets/icon/calendar.png"), "calendar")
+        btn_tasks = layout.IconTextButton(logic.path("assets/icon/tasks.png"), "tasks")
+        btn_prof = layout.IconTextButton(logic.path("assets/icon/profile.png"), "profile")
         self.buttons = [btn_cal, btn_tasks, btn_prof]
 
         for btn in self.buttons:
