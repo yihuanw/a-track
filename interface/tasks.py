@@ -1,9 +1,16 @@
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import Qt, QRect
 from PyQt6.QtGui import QGuiApplication, QPainter, QColor
+from dotenv import load_dotenv
+import os
 
 from . import layout
 import logic
+from db import get_connection
+
+# database setup
+load_dotenv()
+UID = os.getenv("uid")
 
 class TasksPanel(QWidget):
     def __init__(self):
@@ -22,6 +29,8 @@ class TasksPanel(QWidget):
         main_layout = QHBoxLayout(self)
         main_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.setSpacing(20)
+
+# left rectangle ---------------------------------------------------------------------------------
 
         # left rectangle
         self.left_rect = QWidget()
@@ -45,10 +54,22 @@ class TasksPanel(QWidget):
         folder_list = QListWidget()
         folder_list.setFixedHeight(int((rect_height - header_height - 50)))
         folder_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        folder_list.setObjectName("tasks_folderlist")
+        folder_list.setObjectName("tasks_folderList")
 
-        folders = ["all", "folder 1", "folder 2", "folder 3", "folder 4", "folder 5", "folder 6", "folder 7", "uncategorized"]
-        colors = [Qt.GlobalColor.transparent, "#929FCA", "#B39BA5", "#BDD2C0", "#929FCA", "#B39BA5", "#BDD2C0", "#929FCA", Qt.GlobalColor.transparent]
+        with get_connection() as conn:  # fetch folders from db
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT name, color FROM folders WHERE user_id = %s ORDER BY name;",
+                    (UID,)
+                )
+                folder_data = cur.fetchall()  # list of tuples [(name, color), ...]
+
+        folders = [f[0] for f in folder_data]  # folder names
+        colors = [f[1] for f in folder_data]   # folder colors
+        folders.insert(0, "all")
+        colors.insert(0, QColor(0,0,0,0))
+        folders.append("uncategorized")
+        colors.append("#ebe6e8")
 
         for folder in folders:
             item = QListWidgetItem(folder)
@@ -60,6 +81,37 @@ class TasksPanel(QWidget):
 
         folder_list.setItemDelegate(CircleDelegate(colors, folder_list))
         left_layout.addWidget(folder_list)
+
+        # delete folder handle
+        folder_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        folder_list.customContextMenuRequested.connect(lambda pos: logic.show_folder_menu(folder_list, pos, colors, CircleDelegate))
+
+        # add folder input
+        folder_input_layout = QHBoxLayout()
+        folder_input = QLineEdit()
+        folder_input.setFixedHeight(header_height)
+        folder_input.setPlaceholderText("add folder")
+        folder_input.setObjectName("tasks_folderInput")
+        folder_input_layout.addWidget(folder_input)
+
+        color_button = QPushButton()
+        color_button.setFixedSize(header_height, header_height)
+        color_button.setObjectName("tasks_colorButton")
+
+        self.selected_color = "#ebe6e8"
+        color_button.clicked.connect(
+            lambda: logic.pick_color(lambda c: setattr(self, "selected_color", c) or color_button.setStyleSheet(f"background-color: {c}"))
+        )
+        folder_input.returnPressed.connect(
+            lambda: logic.add_folder(UID, folder_input.text(), self.selected_color, folder_list, colors, CircleDelegate)
+        )
+
+        folder_input.clear()
+
+        folder_input_layout.addWidget(color_button)
+        left_layout.addLayout(folder_input_layout)
+
+# right rectangle ---------------------------------------------------------------------------------
 
         # right rectangle
         self.right_rect = QWidget()
@@ -87,7 +139,7 @@ class TasksPanel(QWidget):
         task_list.setFixedWidth(int(right_width * 0.9))
         task_list.setFont(font)
         task_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        task_list.setObjectName("tasks_tasklist")
+        task_list.setObjectName("tasks_taskList")
 
         add_task_input.returnPressed.connect(
             lambda: logic.add_task(add_task_input, task_list)
@@ -99,6 +151,7 @@ class TasksPanel(QWidget):
         main_layout.addWidget(self.left_rect)
         main_layout.addWidget(self.right_rect)
 
+# delegates ---------------------------------------------------------------------------------
 
 # delegate for bullet circles
 class CircleDelegate(QStyledItemDelegate):
@@ -170,6 +223,11 @@ class SimpleSVGCheckDelegate(QStyledItemDelegate):
 
         checked = (state == Qt.CheckState.Checked)
         pixmap = self.get_pixmap(text, checked)
+
+        # draw the background according to the QSS
+        style = option.widget.style() if option.widget else None
+        if style:
+            style.drawPrimitive(QStyle.PrimitiveElement.PE_PanelItemViewItem, option, painter, option.widget)
 
         # draw the checkbox
         y = option.rect.top() + (option.rect.height() - checkbox_size) // 2

@@ -49,7 +49,7 @@ QPushButton:hover {
     padding: 10px;
 }
 
-#tasks_folderlist {
+#tasks_folderList {
     background: transparent;
     border: 0;
     color: #ebe6e8;
@@ -58,16 +58,30 @@ QPushButton:hover {
     padding-right: 10px;
 }
 
-#tasks_folderlist::item {
+#tasks_folderList::item {
     border: 0;
     border-radius: 10px;
 }
 
-#tasks_folderlist::item:selected {
+#tasks_folderList::item:selected {
     background-color: #382f33;
 }
 
-#tasks_addTaskInput {
+QMenu {
+    background-color: #313131;
+    border: 1px solid #ebe6e8;
+}
+
+QMenu::item {
+    background-color: transparent;
+    padding: 10px;
+}
+
+QMenu::item:selected {
+    background-color: #202020;
+}
+
+#tasks_folderInput {
     background-color: #382f33;
     color: #ebe6e8;
     font-family: "Inter";
@@ -77,17 +91,32 @@ QPushButton:hover {
     border-radius: 10px;
 }
 
-#tasks_tasklist {
+#tasks_colorButton {
+    background-color: #ebe6e8;
+    border: 1px solid #ebe6e8;
+}
+
+#tasks_addTaskInput {
+    background-color: #3e393b;
+    color: #ebe6e8;
+    font-family: "Inter";
+    font-weight: 500;
+    padding-left: 10px;
+    border: 0;
+    border-radius: 10px;
+}
+
+#tasks_taskList {
     background-color: transparent;
     border: 0;
     font-family: "Inter";
 }
 
-#tasks_tasklist::item {
+#tasks_taskList::item {
     border: 0;
     border-radius: 10px;
 }
 
-#tasks_tasklist::item:selected {
+#tasks_taskList::item:selected {
     background-color: #313131;
 }
