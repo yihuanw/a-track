@@ -32,15 +32,85 @@ def on_prof_clicked():
 
 
 # controls for tasks.py
-def add_task(add_task_input, task_list):
+def get_folders():
+    folders_from_db = []
+    
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT name, id, color
+                FROM folders
+                WHERE user_id = %s
+                ORDER BY name
+            """, (UID,))
+            folders_from_db = cur.fetchall()  # list of tuples (name, id, color)
+
+    # optionally, prepend "all" and append "uncategorized" if needed
+    folders_from_db.insert(0, ("all", None, None))
+    folders_from_db.append(("uncategorized", None, "#ebe6e8"))
+
+    return folders_from_db
+
+def add_task(add_task_input, folder_dropdown, task_list):
     text = add_task_input.text().strip()
     if not text:
         return
+    
+    # get current folder selection
+    folder_id, folder_color = folder_dropdown.currentData() or (None, "#ebe6e8")
+
+    # insert into tasks table
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO tasks (user_id, title, folder_id) VALUES (%s, %s, %s) RETURNING id, completed;",
+                (UID, text, folder_id)
+            )
+            task_id, completed = cur.fetchone()
+            conn.commit()
+
+    # add to UI
     item = QListWidgetItem(text)
     item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-    item.setCheckState(Qt.CheckState.Unchecked)
+    item.setCheckState(Qt.CheckState.Checked if completed else Qt.CheckState.Unchecked)
+    item.setData(Qt.ItemDataRole.UserRole, task_id) # store db id
+    item.setData(Qt.ItemDataRole.UserRole + 1, folder_color) # store folder color
     task_list.addItem(item)
+
     add_task_input.clear()
+
+def fetch_tasks():
+    # fetch all tasks for current user with optional folder color
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT t.id, t.title, t.completed, t.folder_id, f.color "
+                "FROM tasks t LEFT JOIN folders f ON t.folder_id = f.id "
+                "WHERE t.user_id = %s;",
+                (UID,)
+            )
+            tasks = cur.fetchall()
+    return tasks  # list of tuples: (id, title, completed, folder_id, color)
+
+def populate_task_list(task_list):
+    # fill a QListWidget with tasks from db
+    for task_id, title, completed, folder_id, color in fetch_tasks():
+        item = QListWidgetItem(title)
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        item.setCheckState(Qt.CheckState.Checked if completed else Qt.CheckState.Unchecked)
+        item.setData(Qt.ItemDataRole.UserRole, task_id)
+        item.setData(Qt.ItemDataRole.UserRole + 1, color)
+        task_list.addItem(item)
+
+def update_task_completion(task_id, completed):
+    # update a task's completed status in db
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE tasks SET completed = %s WHERE id = %s;",
+                (completed, task_id)
+            )
+            conn.commit()
 
 def recolor(color, svg_path):
     renderer = QSvgRenderer(svg_path)

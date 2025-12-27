@@ -124,14 +124,34 @@ class TasksPanel(QWidget):
         right_layout.setContentsMargins(left, int(header_height // 2), right, int(header_height // 2))
 
         # add task input
+        task_input_layout = QHBoxLayout()
+        task_input_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
         add_task_input = QLineEdit()
         add_task_input.setPlaceholderText("add task")
         add_task_input.setFixedHeight(int(header_height * 1.5))
-        add_task_input.setFixedWidth(int(right_width * 0.9))
+        add_task_input.setFixedWidth(int(right_width * 0.9 * 0.75))  # 3/4 of original width
         add_task_input.setFont(font)
         add_task_input.setObjectName("tasks_addTaskInput")
 
-        right_layout.addWidget(add_task_input, alignment=Qt.AlignmentFlag.AlignCenter)
+        folder_dropdown = QComboBox()
+        folder_dropdown.setFixedHeight(int(header_height * 1.5))
+        folder_dropdown.setFixedWidth(int(right_width * 0.9 * 0.25))  # 1/4 of original width
+        folder_dropdown.setObjectName("tasks_folderDropdown")
+
+        folders_from_db = logic.get_folders()
+        for folder_name, folder_id, folder_color in folders_from_db:
+            folder_dropdown.addItem(folder_name, userData=(folder_id, folder_color))
+
+        index = folder_dropdown.findText("uncategorized")
+        if index != -1:
+            folder_dropdown.setCurrentIndex(index)
+
+        task_input_layout.addWidget(add_task_input)
+        task_input_layout.addWidget(folder_dropdown)
+
+        right_layout.addLayout(task_input_layout)
+        add_task_input.returnPressed.connect(lambda: logic.add_task(add_task_input, folder_dropdown, task_list))
 
         # task checklist
         task_list = QListWidget()
@@ -141,10 +161,8 @@ class TasksPanel(QWidget):
         task_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         task_list.setObjectName("tasks_taskList")
 
-        add_task_input.returnPressed.connect(
-            lambda: logic.add_task(add_task_input, task_list)
-        )
         task_list.setItemDelegate(SimpleSVGCheckDelegate(parent=task_list))
+        logic.populate_task_list(task_list)
 
         right_layout.addWidget(task_list, alignment=Qt.AlignmentFlag.AlignCenter)
 
@@ -191,8 +209,6 @@ class CircleDelegate(QStyledItemDelegate):
 
 # delegate for checkmark
 class SimpleSVGCheckDelegate(QStyledItemDelegate):
-    COLOR_MAP = {"a": "#b39ba5", "b": "#929FCA", "c": "#BDD2C0"}
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.cached_checked = {}
@@ -204,10 +220,9 @@ class SimpleSVGCheckDelegate(QStyledItemDelegate):
             return int(widget.style().pixelMetric(QStyle.PixelMetric.PM_IndicatorHeight, None, widget) * 1.75)
         return 24
 
-    def get_pixmap(self, text, checked=True):
-        color = self.COLOR_MAP.get(text, "#ebe6e8")
+    def get_pixmap(self, color, checked=True):
         cache = self.cached_checked if checked else self.cached_unchecked
-        key = (text, color)
+        key = (color)
         if key not in cache:
             path = logic.path("assets/icon/check.svg" if checked else "assets/icon/uncheck.svg")
             cache[key] = logic.recolor(color, path)
@@ -219,10 +234,10 @@ class SimpleSVGCheckDelegate(QStyledItemDelegate):
             return
 
         checkbox_size = self.get_checkbox_size(option)
-        text = index.data(Qt.ItemDataRole.DisplayRole)
+        color = index.data(Qt.ItemDataRole.UserRole + 1) or "#ebe6e8"
 
         checked = (state == Qt.CheckState.Checked)
-        pixmap = self.get_pixmap(text, checked)
+        pixmap = self.get_pixmap(color, checked)
 
         # draw the background according to the QSS
         style = option.widget.style() if option.widget else None
@@ -236,9 +251,10 @@ class SimpleSVGCheckDelegate(QStyledItemDelegate):
 
         # draw the text
         text_rect = option.rect.adjusted(checkbox_size + 4, 0, 0, 0)
-        if text:
-            painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
-
+        display_text = index.data(Qt.ItemDataRole.DisplayRole)
+        if display_text:
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, display_text)
+        
     def editorEvent(self, event, model, option, index):
         if event.type() == event.Type.MouseButtonRelease:
             checkbox_size = self.get_checkbox_size(option)
@@ -247,11 +263,19 @@ class SimpleSVGCheckDelegate(QStyledItemDelegate):
             checkbox_rect = QRect(x, y, checkbox_size, checkbox_size)
 
             if checkbox_rect.contains(event.pos()):
-                current_state = index.data(Qt.ItemDataRole.CheckStateRole)
+                current_state = Qt.CheckState(index.data(Qt.ItemDataRole.CheckStateRole))
                 new_state = Qt.CheckState.Unchecked if current_state == Qt.CheckState.Checked else Qt.CheckState.Checked
+                
+                # update appearance
                 model.setData(index, new_state, Qt.ItemDataRole.CheckStateRole)
                 if option.widget:
-                    option.widget.viewport().update()
+                    option.widget.update()
+                
+                # update db
+                task_id = index.data(Qt.ItemDataRole.UserRole)
+                if task_id:
+                    logic.update_task_completion(task_id, new_state == Qt.CheckState.Checked)
+                
                 return True
-
+        
         return super().editorEvent(event, model, option, index)
