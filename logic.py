@@ -19,7 +19,7 @@ def path(*paths):
     base = getattr(sys, "frozen", False) and sys._MEIPASS or os.path.dirname(__file__)
     return os.path.join(base, *paths)
 
-# functions for tasks.py ---------------------------------------------------------------------------------
+# --------------------------- task.py functions ---------------------------
 def get_folders(uid):
     client = get_client()
     response = client.table("folders").select("name,id,color").eq("user_id", uid).order("name").execute()
@@ -74,14 +74,30 @@ def fetch_tasks(uid):
     return tasks
 
 
-def populate_task_list(task_list, uid):
+def populate_task_list(task_list, uid, folder_id="all"):
     task_list.clear()
-    for task_id, title, completed, folder_id, color in fetch_tasks(uid):
-        item = QListWidgetItem(title)
+
+    client = get_user_client()
+    query = client.table("tasks").select("id, title, completed, folder_id, folders(color)").eq("user_id", uid)
+
+    if folder_id == "all":
+        # no additional filter, show all tasks
+        pass
+    elif folder_id is None:
+        # show uncategorized tasks
+        query = query.is_("folder_id", None)
+    else:
+        # show tasks for specific folder
+        query = query.eq("folder_id", folder_id)
+
+    response = query.execute()
+
+    for row in response.data or []:
+        item = QListWidgetItem(row["title"])
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-        item.setCheckState(Qt.CheckState.Checked if completed else Qt.CheckState.Unchecked)
-        item.setData(Qt.ItemDataRole.UserRole, task_id)
-        item.setData(Qt.ItemDataRole.UserRole + 1, color)
+        item.setCheckState(Qt.CheckState.Checked if row["completed"] else Qt.CheckState.Unchecked)
+        item.setData(Qt.ItemDataRole.UserRole, row["id"])
+        item.setData(Qt.ItemDataRole.UserRole + 1, (row.get("folders") or {}).get("color"))
         task_list.addItem(item)
 
 def update_task_completion(task_id, completed):

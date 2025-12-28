@@ -27,7 +27,7 @@ class TasksPanel(QWidget):
         main_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.setSpacing(20)
 
-# left rectangle ---------------------------------------------------------------------------------
+        # --------------------------- left rectangle ---------------------------
 
         # left rectangle
         self.left_rect = QWidget()
@@ -60,13 +60,39 @@ class TasksPanel(QWidget):
         for folder in folders:
             item = QListWidgetItem(folder)
             folder_list.addItem(item)
-
+        
         font = header.font()
         font.setPointSize(int(font.pointSize() * 0.75))
         folder_list.setFont(font)
 
         folder_list.setItemDelegate(CircleDelegate(colors, folder_list))
         left_layout.addWidget(folder_list)
+
+        # change folder
+        def on_folder_changed():
+            current_row = folder_list.currentRow()
+            folder_name, folder_id, _ = folders_from_db[current_row]
+
+            # update task list
+            if folder_name == "all":
+                logic.populate_task_list(task_list, uid, "all")
+                # show all folders in dropdown
+                folder_dropdown.clear()
+                for name, fid, color in folders_from_db:
+                    if name not in ["all"]:
+                        folder_dropdown.addItem(name, userData=(fid, color))
+            elif folder_name == "uncategorized":
+                logic.populate_task_list(task_list, uid, None)
+                # only show uncategorized in dropdown
+                folder_dropdown.clear()
+                folder_dropdown.addItem("uncategorized", userData=(None, "#ebe6e8"))
+            else:
+                logic.populate_task_list(task_list, uid, folder_id)
+                # only show the selected folder
+                folder_dropdown.clear()
+                folder_dropdown.addItem(folder_name, userData=(folder_id, _))
+
+        folder_list.currentRowChanged.connect(lambda _: on_folder_changed())
 
         # folder management / right click
         folder_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -96,7 +122,7 @@ class TasksPanel(QWidget):
         folder_input_layout.addWidget(color_button)
         left_layout.addLayout(folder_input_layout)
 
-# right rectangle ---------------------------------------------------------------------------------
+        # --------------------------- right rectangle ---------------------------
 
         # right rectangle
         self.right_rect = QWidget()
@@ -128,10 +154,6 @@ class TasksPanel(QWidget):
             if folder_name not in ["all"]:
                 folder_dropdown.addItem(folder_name, userData=(folder_id, folder_color))
 
-        index = folder_dropdown.findText("uncategorized")
-        if index != -1:
-            folder_dropdown.setCurrentIndex(index)
-
         task_input_layout.addWidget(add_task_input)
         task_input_layout.addWidget(folder_dropdown)
         
@@ -147,6 +169,7 @@ class TasksPanel(QWidget):
         task_list.setObjectName("tasks_taskList")
 
         task_list.setItemDelegate(SimpleSVGCheckDelegate(parent=task_list))
+        folder_list.setCurrentRow(0)
         logic.populate_task_list(task_list, uid)
 
         # task management / right click
@@ -158,7 +181,7 @@ class TasksPanel(QWidget):
         main_layout.addWidget(self.left_rect)
         main_layout.addWidget(self.right_rect)
 
-# delegates ---------------------------------------------------------------------------------
+# --------------------------- delegates ---------------------------
 
 # delegate for bullet circles
 class CircleDelegate(QStyledItemDelegate):
