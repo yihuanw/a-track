@@ -3,8 +3,9 @@ from PyQt6.QtGui import QIcon, QGuiApplication
 from PyQt6.QtCore import Qt
 
 from interface import layout
-import logic, os, sys
+import logic, db
 from interface.tasks import TasksPanel
+from interface.profile import ProfilePanel
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -39,9 +40,17 @@ class MainWindow(QWidget):
         for btn in self.buttons:
             left_layout.addWidget(btn, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        btn_cal.clicked.connect(logic.on_cal_clicked)
-        btn_tasks.clicked.connect(logic.on_tasks_clicked)
-        btn_prof.clicked.connect(logic.on_prof_clicked)
+        def show_tasks_panel():
+            uid = db.get_uid()
+            if not uid:
+                return
+            
+            tasks_panel = TasksPanel(uid)
+            stacked_widget.addWidget(tasks_panel)
+            stacked_widget.setCurrentIndex(stacked_widget.count() - 1)
+
+        btn_tasks.clicked.connect(show_tasks_panel)
+        btn_prof.clicked.connect(lambda: stacked_widget.setCurrentIndex(0))
 
         left_layout.addStretch()
 
@@ -55,9 +64,9 @@ class MainWindow(QWidget):
         stacked_widget.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding
-        )   
-        tasks_panel = TasksPanel()
-        stacked_widget.addWidget(tasks_panel)
+        )
+        stacked_widget.addWidget(ProfilePanel()) 
+
         right_layout.addWidget(stacked_widget)
 
         # horizontal split

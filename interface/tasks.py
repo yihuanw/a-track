@@ -1,20 +1,17 @@
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import Qt, QRect
 from PyQt6.QtGui import QGuiApplication, QPainter, QColor
-from dotenv import load_dotenv
-import os
 
 from . import layout
 import logic
-from db import get_connection
-
-# database setup
-load_dotenv()
-UID = os.getenv("uid")
 
 class TasksPanel(QWidget):
-    def __init__(self):
+    def __init__(self, uid):
         super().__init__()
+
+        if not uid:
+            return
+
         panel_width = QGuiApplication.primaryScreen().geometry().width() * (5/6)
         panel_height = QGuiApplication.primaryScreen().geometry().height()
 
@@ -52,24 +49,13 @@ class TasksPanel(QWidget):
 
         # scrollable list
         folder_list = QListWidget()
-        folder_list.setFixedHeight(int((rect_height - header_height - 50)))
+        folder_list.setFixedHeight(int((rect_height - header_height * 2 - 50)))
         folder_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         folder_list.setObjectName("tasks_folderList")
 
-        with get_connection() as conn:  # fetch folders from db
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT name, color FROM folders WHERE user_id = %s ORDER BY name;",
-                    (UID,)
-                )
-                folder_data = cur.fetchall()  # list of tuples [(name, color), ...]
-
-        folders = [f[0] for f in folder_data]  # folder names
-        colors = [f[1] for f in folder_data]   # folder colors
-        folders.insert(0, "all")
-        colors.insert(0, QColor(0,0,0,0))
-        folders.append("uncategorized")
-        colors.append("#ebe6e8")
+        folders_from_db = logic.get_folders(uid)
+        folders = [f[0] for f in folders_from_db]  # folder names
+        colors = [f[2] or QColor(0,0,0,0) for f in folders_from_db]   # folder colors
 
         for folder in folders:
             item = QListWidgetItem(folder)
@@ -84,7 +70,7 @@ class TasksPanel(QWidget):
 
         # folder management / right click
         folder_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        folder_list.customContextMenuRequested.connect(lambda pos: logic.show_folder_menu(folder_list, pos, colors, CircleDelegate))
+        folder_list.customContextMenuRequested.connect(lambda pos: logic.show_folder_menu(folder_list, pos, colors, logic.CircleDelegate, uid))
 
         # add folder input
         folder_input_layout = QHBoxLayout()
@@ -102,11 +88,10 @@ class TasksPanel(QWidget):
         color_button.clicked.connect(
             lambda: logic.pick_color(lambda c: setattr(self, "selected_color", c) or color_button.setStyleSheet(f"background-color: {c}"))
         )
-        folder_input.returnPressed.connect(
-            lambda: logic.add_folder(UID, folder_input.text(), self.selected_color, folder_list, colors, CircleDelegate)
-        )
 
-        folder_input.clear()
+        folder_input.returnPressed.connect(
+            lambda: logic.add_folder(folder_input, self.selected_color, folder_list, colors, CircleDelegate, folder_dropdown, uid)
+        )
 
         folder_input_layout.addWidget(color_button)
         left_layout.addLayout(folder_input_layout)
@@ -129,19 +114,19 @@ class TasksPanel(QWidget):
 
         add_task_input = QLineEdit()
         add_task_input.setPlaceholderText("add task")
-        add_task_input.setFixedHeight(int(header_height * 1.5))
+        add_task_input.setFixedHeight(header_height)
         add_task_input.setFixedWidth(int(right_width * 0.9 * 0.75))  # 3/4 of original width
         add_task_input.setFont(font)
         add_task_input.setObjectName("tasks_addTaskInput")
 
         folder_dropdown = QComboBox()
-        folder_dropdown.setFixedHeight(int(header_height * 1.5))
+        folder_dropdown.setFixedHeight(header_height)
         folder_dropdown.setFixedWidth(int(right_width * 0.9 * 0.25))  # 1/4 of original width
         folder_dropdown.setObjectName("tasks_folderDropdown")
 
-        folders_from_db = logic.get_folders()
-        for folder_name, folder_id, folder_color in folders_from_db[1:]:
-            folder_dropdown.addItem(folder_name, userData=(folder_id, folder_color))
+        for folder_name, folder_id, folder_color in folders_from_db:
+            if folder_name not in ["all"]:
+                folder_dropdown.addItem(folder_name, userData=(folder_id, folder_color))
 
         index = folder_dropdown.findText("uncategorized")
         if index != -1:
@@ -149,20 +134,20 @@ class TasksPanel(QWidget):
 
         task_input_layout.addWidget(add_task_input)
         task_input_layout.addWidget(folder_dropdown)
-
+        
         right_layout.addLayout(task_input_layout)
-        add_task_input.returnPressed.connect(lambda: logic.add_task(add_task_input, folder_dropdown, task_list))
+        add_task_input.returnPressed.connect(lambda: logic.add_task(add_task_input, folder_dropdown, task_list, uid))
 
         # task checklist
         task_list = QListWidget()
-        task_list.setFixedHeight(int((rect_height - int(header_height * 1.5) - 50)))
+        task_list.setFixedHeight(int((rect_height - header_height - 50)))
         task_list.setFixedWidth(int(right_width * 0.9))
         task_list.setFont(font)
         task_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         task_list.setObjectName("tasks_taskList")
 
         task_list.setItemDelegate(SimpleSVGCheckDelegate(parent=task_list))
-        logic.populate_task_list(task_list)
+        logic.populate_task_list(task_list, uid)
 
         # task management / right click
         task_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)

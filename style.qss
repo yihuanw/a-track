@@ -131,3 +131,19 @@ QMenu::item:selected {
 #tasks_taskList::item:selected {
     background-color: #313131;
 }
+
+#prof_emailInput, #prof_passwordInput {
+    background-color: #3e393b;
+    color: #ebe6e8;
+    font-family: "Inter";
+    font-weight: 500;
+    padding-left: 10px;
+    border: 0;
+    border-radius: 10px;
+}
+
+#prof_submitButton {
+    font-family: "Inter";
+    font-weight: bold;
+    letter-spacing: 1px;
+}

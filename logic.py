@@ -2,99 +2,78 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QListWidgetItem, QColorDialog, QMenu, QInputDialog
 from PyQt6.QtGui import QPixmap, QPainter, QColor
 from PyQt6.QtSvg import QSvgRenderer
-from dotenv import load_dotenv
+from db import get_user_client
 import sys, os
 
-from db import get_connection
+_cached_client = get_user_client()  # cache the client once
 
-# database setup
-load_dotenv()
-UID = os.getenv("uid")
+def get_client():
+    global _cached_client
+    if _cached_client is None:
+        _cached_client = get_user_client()
+    return _cached_client
 
-# repath for pyinstaller
 def path(*paths):
-    if getattr(sys, "frozen", False):
-        base = sys._MEIPASS
-    else:
-        base = os.path.dirname(__file__)
+    base = getattr(sys, "frozen", False) and sys._MEIPASS or os.path.dirname(__file__)
     return os.path.join(base, *paths)
 
+def get_folders(uid):
+    client = get_client()
+    response = client.table("folders").select("name,id,color").eq("user_id", uid).order("name").execute()
+    folders = [(f["name"], f["id"], f["color"]) for f in (response.data or [])]
+    folders.insert(0, ("all", None, None))
+    folders.append(("uncategorized", None, "#ebe6e8"))
+    return folders
 
-# buttons for ui.py
-def on_cal_clicked():
-    print("calendar")
-
-def on_tasks_clicked():
-    print("tasks")
-
-def on_prof_clicked():
-    print("profile")
-
-
-# controls for tasks.py
-def get_folders():
-    folders_from_db = []
-    
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT name, id, color
-                FROM folders
-                WHERE user_id = %s
-                ORDER BY name
-            """, (UID,))
-            folders_from_db = cur.fetchall()  # list of tuples (name, id, color)
-
-    # prepend "all" and append "uncategorized"
-    folders_from_db.insert(0, ("all", None, None))
-    folders_from_db.append(("uncategorized", None, "#ebe6e8"))
-
-    return folders_from_db
-
-def add_task(add_task_input, folder_dropdown, task_list):
+def add_task(add_task_input, folder_dropdown, task_list, uid):
     text = add_task_input.text().strip()
     if not text:
         return
-    
-    # get current folder selection
+
     folder_id, folder_color = folder_dropdown.currentData() or (None, "#ebe6e8")
+    client = get_client()
+    response = client.table("tasks").insert({
+        "user_id": uid,
+        "title": text,
+        "folder_id": folder_id
+    }).execute()
 
-    # insert into tasks table
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO tasks (user_id, title, folder_id) VALUES (%s, %s, %s) RETURNING id, completed;",
-                (UID, text, folder_id)
-            )
-            task_id, completed = cur.fetchone()
-            conn.commit()
+    if not response.data:
+        return
 
-    # add to UI
-    item = QListWidgetItem(text)
+    task_data = response.data[0]
+    item = QListWidgetItem(task_data["title"])
     item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-    item.setCheckState(Qt.CheckState.Checked if completed else Qt.CheckState.Unchecked)
-    item.setData(Qt.ItemDataRole.UserRole, task_id) # store db id
-    item.setData(Qt.ItemDataRole.UserRole + 1, folder_color) # store folder color
+    item.setCheckState(Qt.CheckState.Checked if task_data.get("completed") else Qt.CheckState.Unchecked)
+    item.setData(Qt.ItemDataRole.UserRole, task_data["id"])
+    item.setData(Qt.ItemDataRole.UserRole + 1, folder_color)
     task_list.addItem(item)
-
     add_task_input.clear()
 
-def fetch_tasks():
-    # fetch all tasks for current user with optional folder color
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT t.id, t.title, t.completed, t.folder_id, f.color "
-                "FROM tasks t LEFT JOIN folders f ON t.folder_id = f.id "
-                "WHERE t.user_id = %s;",
-                (UID,)
-            )
-            tasks = cur.fetchall()
-    return tasks  # list of tuples: (id, title, completed, folder_id, color)
+def fetch_tasks(uid):
+    client = get_client()
+    response = client.table("tasks")\
+        .select("id, title, completed, folder_id, folders(color)")\
+        .eq("user_id", uid).execute()
+    
+    tasks = []
+    for row in response.data or []:
+        folder_color = None
+        if row.get("folders"):
+            folder_color = row["folders"].get("color")
+        tasks.append((
+            row["id"],
+            row["title"],
+            row["completed"],
+            row.get("folder_id"),
+            folder_color
+        ))
+    return tasks
 
-def populate_task_list(task_list):
-    # fill a QListWidget with tasks from db
-    for task_id, title, completed, folder_id, color in fetch_tasks():
+
+def populate_task_list(task_list, uid):
+    task_list.clear()
+    for task_id, title, completed, folder_id, color in fetch_tasks(uid):
         item = QListWidgetItem(title)
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
         item.setCheckState(Qt.CheckState.Checked if completed else Qt.CheckState.Unchecked)
@@ -103,148 +82,92 @@ def populate_task_list(task_list):
         task_list.addItem(item)
 
 def update_task_completion(task_id, completed):
-    # update a task's completed status in db
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE tasks SET completed = %s WHERE id = %s;",
-                (completed, task_id)
-            )
-            conn.commit()
+    client = get_client()
+    client.table("tasks").update({"completed": completed}).eq("id", task_id).execute()
 
 def recolor(color, svg_path):
     renderer = QSvgRenderer(svg_path)
-
-    # determine size
     size = renderer.defaultSize()
     pixmap = QPixmap(size)
-    pixmap.fill(Qt.GlobalColor.transparent)  # keep transparency
+    pixmap.fill(Qt.GlobalColor.transparent)
 
     painter = QPainter(pixmap)
-    # render the SVG onto the pixmap
     renderer.render(painter)
-    
-    # apply recolor
     painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
     painter.fillRect(pixmap.rect(), QColor(color))
     painter.end()
-
     return pixmap
 
-def show_folder_menu(folder_list, pos, colors, CircleDelegate):
+def show_folder_menu(folder_list, pos, colors, CircleDelegate, uid):
     item = folder_list.itemAt(pos)
-    if not item:
+    if not item or item.text() in ["all", "uncategorized"]:
         return
 
-    # prevent change of "all" and "uncategorized"
-    if item.text() in ["all", "uncategorized"]:
-        return
-
+    client = get_client()
     menu = QMenu()
     delete_action = menu.addAction("Delete folder")
     change_color_action = menu.addAction("Change color")
-    rename_action = menu.addAction("Rename folder")  # new action
+    rename_action = menu.addAction("Rename folder")
     action = menu.exec(folder_list.mapToGlobal(pos))
-
     row = folder_list.row(item)
 
     if action == delete_action:
-        # remove from database
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "DELETE FROM folders WHERE user_id = %s AND name = %s",
-                    (UID, item.text())
-                )
-                conn.commit()
-
-        # remove from UI and colors list
+        client.table("folders").delete().eq("user_id", uid).eq("name", item.text()).execute()
         folder_list.takeItem(row)
         colors.pop(row)
         folder_list.setItemDelegate(CircleDelegate(colors, folder_list))
 
     elif action == change_color_action:
-        # pick a new color
         color = QColorDialog.getColor()
         if color.isValid():
             new_color = color.name()
-
-            with get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "UPDATE folders SET color = %s WHERE user_id = %s AND name = %s",
-                        (new_color, UID, item.text())
-                    )
-                    conn.commit()
-        
-        colors[row] = new_color
-        folder_list.setItemDelegate(CircleDelegate(colors, folder_list))
-
+            client.table("folders").update({"color": new_color}).eq("user_id", uid).eq("name", item.text()).execute()
+            colors[row] = new_color
+            folder_list.setItemDelegate(CircleDelegate(colors, folder_list))
+            
     elif action == rename_action:
-        # prompt for new name
-        new_name, ok = QInputDialog.getText(folder_list, "rename Folder", "new folder name:", text=item.text())
+        new_name, ok = QInputDialog.getText(folder_list, "Rename Folder", "New folder name:", text=item.text())
         if ok and new_name.strip():
-            new_name = new_name.strip()
-
-            # update database
-            with get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "UPDATE folders SET name = %s WHERE user_id = %s AND name = %s",
-                        (new_name, UID, item.text())
-                    )
-                    conn.commit()
-
-            # update UI
-            item.setText(new_name)
+            client.table("folders").update({"name": new_name.strip()}).eq("user_id", uid).eq("name", item.text()).execute()
+            item.setText(new_name.strip())
 
 def show_task_menu(task_list, pos):
     item = task_list.itemAt(pos)
     if not item:
         return
 
+    client = get_client()
     menu = QMenu()
     delete_action = menu.addAction("Delete task")
     action = menu.exec(task_list.mapToGlobal(pos))
-
     if action == delete_action:
-        task_id = item.data(Qt.ItemDataRole.UserRole)  # stored task ID
+        task_id = item.data(Qt.ItemDataRole.UserRole)
         if task_id:
-            # remove from database
-            with get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "DELETE FROM tasks WHERE id = %s",
-                        (task_id,)
-                    )
-                    conn.commit()
-
-        # remove from ui
-        row = task_list.row(item)
-        task_list.takeItem(row)
+            client.table("tasks").delete().eq("id", task_id).execute()
+        task_list.takeItem(task_list.row(item))
 
 def pick_color(set_color_callback):
     color = QColorDialog.getColor()
     if color.isValid():
         set_color_callback(color.name())
 
-def add_folder(user_id, folder_name, color, folder_list, color_list, CircleDelegate):
-    folder_name = folder_name.strip()
+def add_folder(folder_input, color, folder_list, color_list, CircleDelegate, folder_dropdown, uid):
+    folder_name = folder_input.text().strip()
     if not folder_name:
         return
+    folder_input.clear()
 
-    # add folder to db
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO folders (user_id, name, color) VALUES (%s, %s, %s) RETURNING id;",
-                (user_id, folder_name, color)
-            )
-            conn.commit()
-    
-    # appearance update
+    client = get_client()
+    client.table("folders").insert({
+        "user_id": uid,
+        "name": folder_name,
+        "color": color
+    }).execute()
+
     item = QListWidgetItem(folder_name)
     folder_list.insertItem(folder_list.count() - 1, item)
-
     color_list.insert(folder_list.count() - 2, color)
     folder_list.setItemDelegate(CircleDelegate(color_list, folder_list))
+
+    if folder_dropdown:
+        folder_dropdown.insertItem(folder_dropdown.count() - 1, folder_name, userData=(None, color))
