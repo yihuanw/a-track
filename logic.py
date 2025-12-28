@@ -5,6 +5,7 @@ from PyQt6.QtSvg import QSvgRenderer
 from db import get_user_client
 import sys, os
 
+# database
 _cached_client = get_user_client()  # cache the client once
 
 def get_client():
@@ -13,10 +14,12 @@ def get_client():
         _cached_client = get_user_client()
     return _cached_client
 
+# repath for pyinstaller
 def path(*paths):
     base = getattr(sys, "frozen", False) and sys._MEIPASS or os.path.dirname(__file__)
     return os.path.join(base, *paths)
 
+# functions for tasks.py ---------------------------------------------------------------------------------
 def get_folders(uid):
     client = get_client()
     response = client.table("folders").select("name,id,color").eq("user_id", uid).order("name").execute()

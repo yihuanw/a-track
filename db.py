@@ -1,9 +1,9 @@
-import os
-import json
+import os, json, sys
 from dotenv import load_dotenv
 from supabase import create_client
 
-load_dotenv()
+base_path = getattr(sys, "_MEIPASS", os.path.dirname(__file__))
+load_dotenv(os.path.join(base_path, ".env"))
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
@@ -12,6 +12,7 @@ SESSION_FILE = "session.json"
 _cached_client = None
 _cached_session = None
 
+# initial login for user
 def login(email: str, password: str):
     supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
     try:
@@ -35,6 +36,7 @@ def login(email: str, password: str):
     print("invalid credentials")
     return False
 
+# refreshes current session
 def refresh_session():
     global _cached_session, _cached_client
     if not os.path.exists(SESSION_FILE):
@@ -71,6 +73,7 @@ def refresh_session():
     
     return None
 
+# gets supabase client for target uid
 def get_user_client():
     global _cached_client, _cached_session
     if _cached_client:
@@ -107,6 +110,7 @@ def get_user_client():
         print(f"error creating authenticated client: {e}")
         return None
 
+# fetches user id
 def get_uid():
     if not os.path.exists(SESSION_FILE):
         return None
@@ -115,3 +119,23 @@ def get_uid():
             return json.load(f).get("uid")
     except Exception:
         return None
+
+# checks whether there is an existing session
+def has_valid_session():
+    if not os.path.exists(SESSION_FILE):
+        return False
+
+    try:
+        with open(SESSION_FILE, "r") as f:
+            data = json.load(f)
+
+        supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+        supabase.auth.set_session(
+            data.get("access_token"),
+            data.get("refresh_token")
+        )
+
+        user = supabase.auth.get_user()
+        return bool(user.user)
+    except Exception:
+        return False

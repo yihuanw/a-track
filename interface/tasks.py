@@ -195,7 +195,6 @@ class CircleDelegate(QStyledItemDelegate):
 
         painter.restore()
 
-
 # delegate for checkmark
 class SimpleSVGCheckDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
