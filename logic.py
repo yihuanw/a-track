@@ -45,7 +45,7 @@ def get_folders():
             """, (UID,))
             folders_from_db = cur.fetchall()  # list of tuples (name, id, color)
 
-    # optionally, prepend "all" and append "uncategorized" if needed
+    # prepend "all" and append "uncategorized"
     folders_from_db.insert(0, ("all", None, None))
     folders_from_db.append(("uncategorized", None, "#ebe6e8"))
 
@@ -198,6 +198,31 @@ def show_folder_menu(folder_list, pos, colors, CircleDelegate):
             # update UI
             item.setText(new_name)
 
+def show_task_menu(task_list, pos):
+    item = task_list.itemAt(pos)
+    if not item:
+        return
+
+    menu = QMenu()
+    delete_action = menu.addAction("Delete task")
+    action = menu.exec(task_list.mapToGlobal(pos))
+
+    if action == delete_action:
+        task_id = item.data(Qt.ItemDataRole.UserRole)  # stored task ID
+        if task_id:
+            # remove from database
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM tasks WHERE id = %s",
+                        (task_id,)
+                    )
+                    conn.commit()
+
+        # remove from ui
+        row = task_list.row(item)
+        task_list.takeItem(row)
+
 def pick_color(set_color_callback):
     color = QColorDialog.getColor()
     if color.isValid():
@@ -208,7 +233,7 @@ def add_folder(user_id, folder_name, color, folder_list, color_list, CircleDeleg
     if not folder_name:
         return
 
-    # add folder to DB
+    # add folder to db
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(

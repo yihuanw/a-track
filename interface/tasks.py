@@ -82,7 +82,7 @@ class TasksPanel(QWidget):
         folder_list.setItemDelegate(CircleDelegate(colors, folder_list))
         left_layout.addWidget(folder_list)
 
-        # delete folder handle
+        # folder management / right click
         folder_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         folder_list.customContextMenuRequested.connect(lambda pos: logic.show_folder_menu(folder_list, pos, colors, CircleDelegate))
 
@@ -140,7 +140,7 @@ class TasksPanel(QWidget):
         folder_dropdown.setObjectName("tasks_folderDropdown")
 
         folders_from_db = logic.get_folders()
-        for folder_name, folder_id, folder_color in folders_from_db:
+        for folder_name, folder_id, folder_color in folders_from_db[1:]:
             folder_dropdown.addItem(folder_name, userData=(folder_id, folder_color))
 
         index = folder_dropdown.findText("uncategorized")
@@ -163,6 +163,10 @@ class TasksPanel(QWidget):
 
         task_list.setItemDelegate(SimpleSVGCheckDelegate(parent=task_list))
         logic.populate_task_list(task_list)
+
+        # task management / right click
+        task_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        task_list.customContextMenuRequested.connect(lambda pos: logic.show_task_menu(task_list, pos))
 
         right_layout.addWidget(task_list, alignment=Qt.AlignmentFlag.AlignCenter)
 
