@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import *
-from PyQt6.QtCore import Qt, QRect
+from PyQt6.QtCore import Qt, QRect, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QPainter, QColor
 
 from . import layout
@@ -69,6 +69,7 @@ class TasksPanel(QWidget):
         left_layout.addWidget(folder_list)
 
         # change folder
+        self.show_completed = True  # default
         def on_folder_changed():
             item = folder_list.currentItem()
             if not item:
@@ -78,7 +79,7 @@ class TasksPanel(QWidget):
             folder_id = item.data(Qt.ItemDataRole.UserRole)
 
             if folder_name == "all":
-                logic.populate_task_list(task_list, uid, "all")
+                logic.populate_task_list(task_list, uid, "all", show_completed=self.show_completed)
                 folder_dropdown.clear()
                 for i in range(folder_list.count()):
                     it = folder_list.item(i)
@@ -88,12 +89,12 @@ class TasksPanel(QWidget):
                         folder_dropdown.addItem(name, userData=(fid, colors[i]))
 
             elif folder_name == "uncategorized":
-                logic.populate_task_list(task_list, uid, None)
+                logic.populate_task_list(task_list, uid, None, show_completed=self.show_completed)
                 folder_dropdown.clear()
                 folder_dropdown.addItem("uncategorized", userData=(None, "#ebe6e8"))
 
             else:
-                logic.populate_task_list(task_list, uid, folder_id)
+                logic.populate_task_list(task_list, uid, folder_id, show_completed=self.show_completed)
                 folder_dropdown.clear()
                 folder_dropdown.addItem(folder_name, userData=(folder_id, colors[folder_list.row(item)]))
 
@@ -171,15 +172,27 @@ class TasksPanel(QWidget):
 
         # task checklist
         task_list = QListWidget()
-        task_list.setFixedHeight(int((rect_height - header_height - 50)))
+        task_list.setFixedHeight(int((rect_height - header_height * 2 - 50)))
         task_list.setFixedWidth(int(right_width * 0.9))
         task_list.setFont(font)
         task_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         task_list.setObjectName("tasks_taskList")
 
-        task_list.setItemDelegate(SimpleSVGCheckDelegate(parent=task_list))
+        delegate = SimpleSVGCheckDelegate(parent=task_list)
+        task_list.setItemDelegate(delegate)
         folder_list.setCurrentRow(0)
         logic.populate_task_list(task_list, uid)
+
+        def refresh_tasks():
+            if not self.show_completed:
+                current_item = folder_list.currentItem()
+                if not current_item:
+                    return
+                folder_name = current_item.text()
+                folder_id = "all" if folder_name == "all" else None if folder_name == "uncategorized" else current_item.data(Qt.ItemDataRole.UserRole)
+                logic.populate_task_list(task_list, uid, folder_id, show_completed=self.show_completed)
+
+        delegate.taskToggled.connect(refresh_tasks)
 
         # task management / right click
         task_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -187,6 +200,31 @@ class TasksPanel(QWidget):
 
         right_layout.addWidget(task_list, alignment=Qt.AlignmentFlag.AlignCenter)
 
+        # show completed button
+        show_completed_btn = QPushButton("hide completed" if self.show_completed else "show completed")
+        show_completed_btn.setFixedHeight(header_height)
+        show_completed_btn.setFixedWidth(150)
+        show_completed_btn.setObjectName("tasks_showCompletedBtn")
+        right_layout.addWidget(show_completed_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        def toggle_show_completed():
+            self.show_completed = not self.show_completed
+            show_completed_btn.setText("hide completed" if self.show_completed else "show completed")
+            # re-populate task list with current folder
+            current_folder_item = folder_list.currentItem()
+            if not current_folder_item:
+                return
+            folder_name = current_folder_item.text()
+            folder_id = current_folder_item.data(Qt.ItemDataRole.UserRole)
+            if folder_name == "all":
+                folder_id = "all"
+            elif folder_name == "uncategorized":
+                folder_id = None
+            logic.populate_task_list(task_list, uid, folder_id, show_completed=self.show_completed)
+
+        show_completed_btn.clicked.connect(toggle_show_completed)
+
+        # add to main layout
         main_layout.addWidget(self.left_rect)
         main_layout.addWidget(self.right_rect)
 
@@ -229,6 +267,7 @@ class CircleDelegate(QStyledItemDelegate):
 
 # delegate for checkmark
 class SimpleSVGCheckDelegate(QStyledItemDelegate):
+    taskToggled = pyqtSignal()
     def __init__(self, parent=None):
         super().__init__(parent)
         self.cached_checked = {}
@@ -256,7 +295,7 @@ class SimpleSVGCheckDelegate(QStyledItemDelegate):
         checkbox_size = self.get_checkbox_size(option)
         color = index.data(Qt.ItemDataRole.UserRole + 1) or "#ebe6e8"
 
-        checked = (state == Qt.CheckState.Checked)
+        checked = (state == Qt.CheckState.Checked.value)
         pixmap = self.get_pixmap(color, checked)
 
         # draw the background according to the QSS
@@ -285,17 +324,22 @@ class SimpleSVGCheckDelegate(QStyledItemDelegate):
             if checkbox_rect.contains(event.pos()):
                 current_state = Qt.CheckState(index.data(Qt.ItemDataRole.CheckStateRole))
                 new_state = Qt.CheckState.Unchecked if current_state == Qt.CheckState.Checked else Qt.CheckState.Checked
-                
-                # update appearance
-                model.setData(index, new_state, Qt.ItemDataRole.CheckStateRole)
+
+                # update model
+                model.setData(index, new_state.value, Qt.ItemDataRole.CheckStateRole)
+
+                # force repaint of this item
                 if option.widget:
-                    option.widget.update()
-                
+                    option.widget.viewport().update(option.rect)
+
                 # update db
                 task_id = index.data(Qt.ItemDataRole.UserRole)
                 if task_id:
                     logic.update_task_completion(task_id, new_state == Qt.CheckState.Checked)
-                
+                    # only refresh task list if hiding completed tasks
+                    if hasattr(self, "taskToggled"):
+                        self.taskToggled.emit()
+
                 return True
         
         return super().editorEvent(event, model, option, index)

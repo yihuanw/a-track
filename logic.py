@@ -20,6 +20,7 @@ def path(*paths):
     return os.path.join(base, *paths)
 
 # --------------------------- task.py functions ---------------------------
+# fetches all folders for a user
 def get_folders(uid):
     client = get_client()
     response = client.table("folders").select("name,id,color").eq("user_id", uid).order("name").execute()
@@ -28,6 +29,34 @@ def get_folders(uid):
     folders.append(("uncategorized", None, "#ebe6e8"))
     return folders
 
+# adds a new folder to the database and updates the folder list and dropdown UI
+def add_folder(folder_input, color, folder_list, color_list, CircleDelegate, folder_dropdown, uid):
+    folder_name = folder_input.text().strip()
+    if not folder_name:
+        return
+    folder_input.clear()
+
+    client = get_client()
+    res = client.table("folders").insert({
+        "user_id": uid,
+        "name": folder_name,
+        "color": color
+    }).execute()
+
+    folder_id = res.data[0]["id"]
+
+    # add to folder_list
+    item = QListWidgetItem(folder_name)
+    item.setData(Qt.ItemDataRole.UserRole, folder_id)  # store the id
+    folder_list.insertItem(folder_list.count() - 1, item)
+    color_list.insert(folder_list.count() - 2, color)
+    folder_list.setItemDelegate(CircleDelegate(color_list, folder_list))
+
+    # add to dropdown
+    if folder_dropdown:
+        folder_dropdown.addItem(folder_name, userData=(folder_id, color))
+
+# adds a new task to the database and updates the task list UI
 def add_task(add_task_input, folder_dropdown, task_list, uid):
     text = add_task_input.text().strip()
     if not text:
@@ -53,6 +82,7 @@ def add_task(add_task_input, folder_dropdown, task_list, uid):
     task_list.addItem(item)
     add_task_input.clear()
 
+# retrieves all tasks for a user, including folder color info
 def fetch_tasks(uid):
     client = get_client()
     response = client.table("tasks")\
@@ -73,25 +103,25 @@ def fetch_tasks(uid):
         ))
     return tasks
 
-def populate_task_list(task_list, uid, folder_id="all"):
+# populates the task list UI for a given user and folder
+def populate_task_list(task_list, uid, folder_id="all", show_completed=True):
     task_list.clear()
 
     client = get_user_client()
     query = client.table("tasks").select("id, title, completed, folder_id, folders(color)").eq("user_id", uid)
 
     if folder_id == "all":
-        # no additional filter, show all tasks
         pass
     elif folder_id is None:
-        # show uncategorized tasks
         query = query.is_("folder_id", None)
     else:
-        # show tasks for specific folder
         query = query.eq("folder_id", folder_id)
 
     response = query.execute()
 
     for row in response.data or []:
+        if not show_completed and row.get("completed"):
+            continue  # skip completed tasks if toggle off
         item = QListWidgetItem(row["title"])
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
         item.setCheckState(Qt.CheckState.Checked if row["completed"] else Qt.CheckState.Unchecked)
@@ -99,23 +129,12 @@ def populate_task_list(task_list, uid, folder_id="all"):
         item.setData(Qt.ItemDataRole.UserRole + 1, (row.get("folders") or {}).get("color"))
         task_list.addItem(item)
 
+# updates the completed status of a task in the database
 def update_task_completion(task_id, completed):
     client = get_client()
     client.table("tasks").update({"completed": completed}).eq("id", task_id).execute()
 
-def recolor(color, svg_path):
-    renderer = QSvgRenderer(svg_path)
-    size = renderer.defaultSize()
-    pixmap = QPixmap(size)
-    pixmap.fill(Qt.GlobalColor.transparent)
-
-    painter = QPainter(pixmap)
-    renderer.render(painter)
-    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-    painter.fillRect(pixmap.rect(), QColor(color))
-    painter.end()
-    return pixmap
-
+# shows a context menu for folders with options to delete, rename, or change color
 def show_folder_menu(folder_list, pos, colors, CircleDelegate, folder_dropdown, uid):
     item = folder_list.itemAt(pos)
     if not item or item.text() in ["all", "uncategorized"]:
@@ -190,6 +209,7 @@ def show_folder_menu(folder_list, pos, colors, CircleDelegate, folder_dropdown, 
             client.table("folders").update({"name": new_name.strip()}).eq("user_id", uid).eq("name", item.text()).execute()
             item.setText(new_name.strip())
 
+# shows a context menu for tasks with option to delete
 def show_task_menu(task_list, pos):
     item = task_list.itemAt(pos)
     if not item:
@@ -205,33 +225,22 @@ def show_task_menu(task_list, pos):
             client.table("tasks").delete().eq("id", task_id).execute()
         task_list.takeItem(task_list.row(item))
 
+# recolors an SVG file with the specified color and returns a QPixmap
+def recolor(color, svg_path):
+    renderer = QSvgRenderer(svg_path)
+    size = renderer.defaultSize()
+    pixmap = QPixmap(size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(pixmap)
+    renderer.render(painter)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(pixmap.rect(), QColor(color))
+    painter.end()
+    return pixmap
+
+# opens a color picker dialog and calls a callback with the chosen color
 def pick_color(set_color_callback):
     color = QColorDialog.getColor()
     if color.isValid():
         set_color_callback(color.name())
-
-def add_folder(folder_input, color, folder_list, color_list, CircleDelegate, folder_dropdown, uid):
-    folder_name = folder_input.text().strip()
-    if not folder_name:
-        return
-    folder_input.clear()
-
-    client = get_client()
-    res = client.table("folders").insert({
-        "user_id": uid,
-        "name": folder_name,
-        "color": color
-    }).execute()
-
-    folder_id = res.data[0]["id"]
-
-    # add to folder_list
-    item = QListWidgetItem(folder_name)
-    item.setData(Qt.ItemDataRole.UserRole, folder_id)  # store the id
-    folder_list.insertItem(folder_list.count() - 1, item)
-    color_list.insert(folder_list.count() - 2, color)
-    folder_list.setItemDelegate(CircleDelegate(color_list, folder_list))
-
-    # add to dropdown
-    if folder_dropdown:
-        folder_dropdown.addItem(folder_name, userData=(folder_id, color))
