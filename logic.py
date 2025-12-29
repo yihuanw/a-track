@@ -1,5 +1,5 @@
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QListWidgetItem, QColorDialog, QMenu, QInputDialog
+from PyQt6.QtWidgets import QListWidgetItem, QColorDialog, QMenu, QInputDialog, QMessageBox
 from PyQt6.QtGui import QPixmap, QPainter, QColor
 from PyQt6.QtSvg import QSvgRenderer
 from db import get_user_client
@@ -73,7 +73,6 @@ def fetch_tasks(uid):
         ))
     return tasks
 
-
 def populate_task_list(task_list, uid, folder_id="all"):
     task_list.clear()
 
@@ -117,21 +116,62 @@ def recolor(color, svg_path):
     painter.end()
     return pixmap
 
-def show_folder_menu(folder_list, pos, colors, CircleDelegate, uid):
+def show_folder_menu(folder_list, pos, colors, CircleDelegate, folder_dropdown, uid):
     item = folder_list.itemAt(pos)
     if not item or item.text() in ["all", "uncategorized"]:
         return
 
     client = get_client()
+    folder_name = item.text()
+    row = folder_list.row(item)
+
     menu = QMenu()
     delete_action = menu.addAction("Delete folder")
     change_color_action = menu.addAction("Change color")
     rename_action = menu.addAction("Rename folder")
+
     action = menu.exec(folder_list.mapToGlobal(pos))
-    row = folder_list.row(item)
 
     if action == delete_action:
-        client.table("folders").delete().eq("user_id", uid).eq("name", item.text()).execute()
+        msg = QMessageBox(folder_list)
+        msg.setWindowTitle("Delete folder")
+        msg.setText("Manage tasks in '{folder_name}")
+        delete_tasks_btn = msg.addButton("Delete all tasks", QMessageBox.ButtonRole.DestructiveRole)
+        move_tasks_btn = msg.addButton("Move to uncategorized", QMessageBox.ButtonRole.ActionRole)
+        cancel_btn = msg.addButton(QMessageBox.StandardButton.Cancel)
+        msg.exec()
+
+        if msg.clickedButton() == cancel_btn:
+            return
+
+        folder_res = (
+            client.table("folders")
+            .select("id")
+            .eq("user_id", uid)
+            .eq("name", folder_name)
+            .execute()
+        )
+
+        if not folder_res.data:
+            return
+
+        folder_id = folder_res.data[0]["id"]
+
+        if msg.clickedButton() == delete_tasks_btn:
+            client.table("tasks").delete().eq("folder_id", folder_id).execute()
+
+        elif msg.clickedButton() == move_tasks_btn:
+            client.table("tasks").update(
+                {"folder_id": None}
+            ).eq("folder_id", folder_id).execute()
+
+        client.table("folders").delete().eq("id", folder_id).execute()
+
+        for i in range(folder_dropdown.count()):
+            if folder_dropdown.itemText(i) == folder_name:
+                folder_dropdown.removeItem(i)
+                break
+
         folder_list.takeItem(row)
         colors.pop(row)
         folder_list.setItemDelegate(CircleDelegate(colors, folder_list))
@@ -177,16 +217,21 @@ def add_folder(folder_input, color, folder_list, color_list, CircleDelegate, fol
     folder_input.clear()
 
     client = get_client()
-    client.table("folders").insert({
+    res = client.table("folders").insert({
         "user_id": uid,
         "name": folder_name,
         "color": color
     }).execute()
 
+    folder_id = res.data[0]["id"]
+
+    # add to folder_list
     item = QListWidgetItem(folder_name)
+    item.setData(Qt.ItemDataRole.UserRole, folder_id)  # store the id
     folder_list.insertItem(folder_list.count() - 1, item)
     color_list.insert(folder_list.count() - 2, color)
     folder_list.setItemDelegate(CircleDelegate(color_list, folder_list))
 
+    # add to dropdown
     if folder_dropdown:
-        folder_dropdown.insertItem(folder_dropdown.count() - 1, folder_name, userData=(None, color))
+        folder_dropdown.addItem(folder_name, userData=(folder_id, color))

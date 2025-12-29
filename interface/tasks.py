@@ -54,11 +54,11 @@ class TasksPanel(QWidget):
         folder_list.setObjectName("tasks_folderList")
 
         folders_from_db = logic.get_folders(uid)
-        folders = [f[0] for f in folders_from_db]  # folder names
         colors = [f[2] or QColor(0,0,0,0) for f in folders_from_db]   # folder colors
 
-        for folder in folders:
-            item = QListWidgetItem(folder)
+        for name, folder_id, _ in folders_from_db:
+            item = QListWidgetItem(name)
+            item.setData(Qt.ItemDataRole.UserRole, folder_id)
             folder_list.addItem(item)
         
         font = header.font()
@@ -70,33 +70,42 @@ class TasksPanel(QWidget):
 
         # change folder
         def on_folder_changed():
-            current_row = folder_list.currentRow()
-            folder_name, folder_id, _ = folders_from_db[current_row]
+            item = folder_list.currentItem()
+            if not item:
+                return
 
-            # update task list
+            folder_name = item.text()
+            folder_id = item.data(Qt.ItemDataRole.UserRole)
+
             if folder_name == "all":
                 logic.populate_task_list(task_list, uid, "all")
-                # show all folders in dropdown
                 folder_dropdown.clear()
-                for name, fid, color in folders_from_db:
+                for i in range(folder_list.count()):
+                    it = folder_list.item(i)
+                    name = it.text()
+                    fid = it.data(Qt.ItemDataRole.UserRole)
                     if name not in ["all"]:
-                        folder_dropdown.addItem(name, userData=(fid, color))
+                        folder_dropdown.addItem(name, userData=(fid, colors[i]))
+
             elif folder_name == "uncategorized":
                 logic.populate_task_list(task_list, uid, None)
-                # only show uncategorized in dropdown
                 folder_dropdown.clear()
                 folder_dropdown.addItem("uncategorized", userData=(None, "#ebe6e8"))
+
             else:
                 logic.populate_task_list(task_list, uid, folder_id)
-                # only show the selected folder
                 folder_dropdown.clear()
-                folder_dropdown.addItem(folder_name, userData=(folder_id, _))
+                folder_dropdown.addItem(folder_name, userData=(folder_id, colors[folder_list.row(item)]))
 
         folder_list.currentRowChanged.connect(lambda _: on_folder_changed())
 
         # folder management / right click
         folder_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        folder_list.customContextMenuRequested.connect(lambda pos: logic.show_folder_menu(folder_list, pos, colors, logic.CircleDelegate, uid))
+        folder_list.customContextMenuRequested.connect(
+            lambda pos: logic.show_folder_menu(
+                folder_list, pos, colors, CircleDelegate, folder_dropdown, uid
+            )
+        )
 
         # add folder input
         folder_input_layout = QHBoxLayout()
