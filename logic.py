@@ -1,5 +1,5 @@
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QListWidgetItem, QColorDialog, QMenu, QInputDialog, QMessageBox
+from PyQt6.QtWidgets import QListWidgetItem, QColorDialog, QMenu, QInputDialog, QMessageBox, QGridLayout
 from PyQt6.QtGui import QPixmap, QPainter, QColor
 from PyQt6.QtSvg import QSvgRenderer
 from db import get_user_client
@@ -133,6 +133,20 @@ def populate_task_list(task_list, uid, folder_id="all", show_completed=True):
 def update_task_completion(task_id, completed):
     client = get_client()
     client.table("tasks").update({"completed": completed}).eq("id", task_id).execute()
+
+# deletes all completed tasks in current folder
+def delete_completed_tasks(uid, folder_id="all"):
+    client = get_client()
+    query = client.table("tasks").delete().eq("user_id", uid).eq("completed", True)
+
+    if folder_id == "all":
+        pass
+    elif folder_id is None:
+        query = query.is_("folder_id", None)
+    else:
+        query = query.eq("folder_id", folder_id)
+
+    query.execute()
 
 # shows a context menu for folders with options to delete, rename, or change color
 def show_folder_menu(folder_list, pos, colors, CircleDelegate, folder_dropdown, uid):

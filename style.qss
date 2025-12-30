@@ -152,3 +152,8 @@ QMenu::item:selected {
     color: #cf8085;
     font-family: "Inter";
 }
+
+QMessageBox QPushButton {
+    border-radius: 5px;
+    padding: 5px;
+}

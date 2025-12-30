@@ -201,11 +201,14 @@ class TasksPanel(QWidget):
         right_layout.addWidget(task_list, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # show completed button
+        bottom_btn_layout = QHBoxLayout()
+        bottom_btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
         show_completed_btn = QPushButton("hide completed" if self.show_completed else "show completed")
         show_completed_btn.setFixedHeight(header_height)
         show_completed_btn.setFixedWidth(150)
         show_completed_btn.setObjectName("tasks_showCompletedBtn")
-        right_layout.addWidget(show_completed_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+        bottom_btn_layout.addWidget(show_completed_btn)
 
         def toggle_show_completed():
             self.show_completed = not self.show_completed
@@ -223,6 +226,45 @@ class TasksPanel(QWidget):
             logic.populate_task_list(task_list, uid, folder_id, show_completed=self.show_completed)
 
         show_completed_btn.clicked.connect(toggle_show_completed)
+
+        # delete completed button
+        delete_completed_btn = QPushButton("delete completed tasks")
+        delete_completed_btn.setFixedHeight(header_height)
+        delete_completed_btn.setFixedWidth(180)
+        delete_completed_btn.setObjectName("tasks_deleteCompletedBtn")
+        bottom_btn_layout.addWidget(delete_completed_btn)
+        right_layout.addLayout(bottom_btn_layout)
+
+        def delete_completed_tasks_confirm():
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Delete completed tasks")
+            msg.setText("Are you sure you want to delete all completed tasks?")
+            msg.setStandardButtons(
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel
+            )
+            msg.setDefaultButton(QMessageBox.StandardButton.Cancel)
+            
+            if msg.exec() != QMessageBox.StandardButton.Yes:
+                return
+
+            current_item = folder_list.currentItem()
+            if not current_item:
+                return
+
+            folder_name = current_item.text()
+            folder_id = current_item.data(Qt.ItemDataRole.UserRole)
+
+            if folder_name == "all":
+                folder_id = "all"
+            elif folder_name == "uncategorized":
+                folder_id = None
+
+            logic.delete_completed_tasks(uid, folder_id)
+            logic.populate_task_list(
+                task_list, uid, folder_id, show_completed=self.show_completed
+            )
+
+        delete_completed_btn.clicked.connect(delete_completed_tasks_confirm)
 
         # add to main layout
         main_layout.addWidget(self.left_rect)
