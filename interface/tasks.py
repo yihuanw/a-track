@@ -196,7 +196,7 @@ class TasksPanel(QWidget):
 
         # task management / right click
         task_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        task_list.customContextMenuRequested.connect(lambda pos: logic.show_task_menu(task_list, pos))
+        task_list.customContextMenuRequested.connect(lambda pos: logic.show_task_menu(task_list, pos, folder_list, SimpleSVGCheckDelegate))
 
         right_layout.addWidget(task_list, alignment=Qt.AlignmentFlag.AlignCenter)
 
@@ -204,7 +204,7 @@ class TasksPanel(QWidget):
         bottom_btn_layout = QHBoxLayout()
         bottom_btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        show_completed_btn = QPushButton("hide completed" if self.show_completed else "show completed")
+        show_completed_btn = QPushButton("hide completed tasks" if self.show_completed else "show completed tasks")
         show_completed_btn.setFixedHeight(header_height)
         show_completed_btn.setFixedWidth(150)
         show_completed_btn.setObjectName("tasks_showCompletedBtn")
