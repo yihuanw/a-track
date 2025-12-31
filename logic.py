@@ -1,6 +1,6 @@
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QListWidgetItem, QColorDialog, QMenu, QInputDialog, QMessageBox, QGridLayout
-from PyQt6.QtGui import QPixmap, QPainter, QColor
+from PyQt6.QtWidgets import *
+from PyQt6.QtCore import Qt, QDateTime, QTime
+from PyQt6.QtGui import QPixmap, QPainter, QColor, QTextCharFormat
 from PyQt6.QtSvg import QSvgRenderer
 from db import get_user_client
 import sys, os
@@ -25,8 +25,8 @@ def get_folders(uid):
     client = get_client()
     response = client.table("folders").select("name,id,color").eq("user_id", uid).order("name").execute()
     folders = [(f["name"], f["id"], f["color"]) for f in (response.data or [])]
-    folders.insert(0, ("all", None, None))
-    folders.append(("uncategorized", None, "#ebe6e8"))
+    folders.insert(0, ("All", None, None))
+    folders.append(("Uncategorized", None, "#ebe6e8"))
     return folders
 
 # adds a new folder to the database and updates the folder list and dropdown UI
@@ -57,18 +57,24 @@ def add_folder(folder_input, color, folder_list, color_list, CircleDelegate, fol
         folder_dropdown.addItem(folder_name, userData=(folder_id, color))
 
 # adds a new task to the database and updates the task list UI
-def add_task(add_task_input, folder_dropdown, task_list, uid):
+def add_task(add_task_input, folder_dropdown, task_list, uid, deadline_qdt=None):
     text = add_task_input.text().strip()
     if not text:
         return
 
     folder_id, folder_color = folder_dropdown.currentData() or (None, "#ebe6e8")
     client = get_client()
-    response = client.table("tasks").insert({
+
+    payload = {
         "user_id": uid,
         "title": text,
         "folder_id": folder_id
-    }).execute()
+    }
+
+    if deadline_qdt:
+        payload["deadline"] = deadline_qdt.toUTC().toString(Qt.DateFormat.ISODate)
+
+    response = client.table("tasks").insert(payload).execute()
 
     if not response.data:
         return
@@ -80,7 +86,9 @@ def add_task(add_task_input, folder_dropdown, task_list, uid):
     item.setData(Qt.ItemDataRole.UserRole, task_data["id"])
     item.setData(Qt.ItemDataRole.UserRole + 1, folder_color)
     task_list.addItem(item)
+
     add_task_input.clear()
+    deadline_qdt = None
 
 # retrieves all tasks for a user, including folder color info
 def fetch_tasks(uid):
@@ -104,13 +112,13 @@ def fetch_tasks(uid):
     return tasks
 
 # populates the task list UI for a given user and folder
-def populate_task_list(task_list, uid, folder_id="all", show_completed=True):
+def populate_task_list(task_list, uid, folder_id="All", show_completed=True):
     task_list.clear()
 
     client = get_user_client()
-    query = client.table("tasks").select("id, title, completed, folder_id, folders(color)").eq("user_id", uid)
+    query = client.table("tasks").select("id, title, completed, folder_id, folders(color), deadline").eq("user_id", uid)
 
-    if folder_id == "all":
+    if folder_id == "All":
         pass
     elif folder_id is None:
         query = query.is_("folder_id", None)
@@ -122,11 +130,24 @@ def populate_task_list(task_list, uid, folder_id="all", show_completed=True):
     for row in response.data or []:
         if not show_completed and row.get("completed"):
             continue  # skip completed tasks if toggle off
-        item = QListWidgetItem(row["title"])
+
+        display_text = row["title"]
+
+        item = QListWidgetItem(display_text)
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-        item.setCheckState(Qt.CheckState.Checked if row["completed"] else Qt.CheckState.Unchecked)
+        item.setCheckState(Qt.CheckState.Checked if row.get("completed") else Qt.CheckState.Unchecked)
         item.setData(Qt.ItemDataRole.UserRole, row["id"])
         item.setData(Qt.ItemDataRole.UserRole + 1, (row.get("folders") or {}).get("color"))
+
+        deadline = row.get("deadline")  # can be None
+        if deadline:
+            # convert ISO string to QDateTime
+            dt = QDateTime.fromString(deadline, Qt.DateFormat.ISODate)
+            dt = dt.toLocalTime()
+            item.setData(Qt.ItemDataRole.UserRole + 2, dt)
+        else:
+            item.setData(Qt.ItemDataRole.UserRole + 2, None)
+
         task_list.addItem(item)
 
 # updates the completed status of a task in the database
@@ -135,11 +156,11 @@ def update_task_completion(task_id, completed):
     client.table("tasks").update({"completed": completed}).eq("id", task_id).execute()
 
 # deletes all completed tasks in current folder
-def delete_completed_tasks(uid, folder_id="all"):
+def delete_completed_tasks(uid, folder_id="All"):
     client = get_client()
     query = client.table("tasks").delete().eq("user_id", uid).eq("completed", True)
 
-    if folder_id == "all":
+    if folder_id == "All":
         pass
     elif folder_id is None:
         query = query.is_("folder_id", None)
@@ -148,10 +169,10 @@ def delete_completed_tasks(uid, folder_id="all"):
 
     query.execute()
 
-# shows a context menu for folders with options to delete, rename, or change color
+# shows a context menu for folders with options to delete, change color, or rename
 def show_folder_menu(folder_list, pos, colors, CircleDelegate, folder_dropdown, uid):
     item = folder_list.itemAt(pos)
-    if not item or item.text() in ["all", "uncategorized"]:
+    if not item or item.text() in ["All", "Uncategorized"]:
         return
 
     client = get_client()
@@ -168,7 +189,7 @@ def show_folder_menu(folder_list, pos, colors, CircleDelegate, folder_dropdown, 
     if action == delete_action:
         msg = QMessageBox(folder_list)
         msg.setWindowTitle("Delete folder")
-        msg.setText("Manage tasks in '{folder_name}")
+        msg.setText("Manage tasks in folder")
         delete_tasks_btn = msg.addButton("Delete all tasks", QMessageBox.ButtonRole.DestructiveRole)
         move_tasks_btn = msg.addButton("Move to uncategorized", QMessageBox.ButtonRole.ActionRole)
         cancel_btn = msg.addButton(QMessageBox.StandardButton.Cancel)
@@ -225,8 +246,8 @@ def show_folder_menu(folder_list, pos, colors, CircleDelegate, folder_dropdown, 
             client.table("folders").update({"name": new_name.strip()}).eq("user_id", uid).eq("name", item.text()).execute()
             item.setText(new_name.strip())
 
-# shows a context menu for tasks with option to delete
-def show_task_menu(task_list, pos, folder_list, SimpleSVGCheckDelegate):
+# shows a context menu for tasks with option to delete, change folder, or rename
+def show_task_menu(task_list, pos, folder_list):
     item = task_list.itemAt(pos)
     if not item:
         return
@@ -254,7 +275,7 @@ def show_task_menu(task_list, pos, folder_list, SimpleSVGCheckDelegate):
             f_item = folder_list.item(i)
             f_name = f_item.text()
             f_id = f_item.data(Qt.ItemDataRole.UserRole)
-            if f_name not in ["all"]:
+            if f_name not in ["All"]:
                 folders.append((f_name, f_id))
 
         folder_names = [f[0] for f in folders]
@@ -293,6 +314,46 @@ def show_task_menu(task_list, pos, folder_list, SimpleSVGCheckDelegate):
             if task_id:
                 client.table("tasks").update({"title": new_title.strip()}).eq("id", task_id).execute()
             item.setText(new_title.strip())
+
+# deadline selection calendar
+def pick_deadline(parent):
+    dialog = QDialog(parent)
+    dialog.setWindowTitle("Set deadline")
+    layout = QVBoxLayout(dialog)
+
+    calendar = QCalendarWidget()
+    time_edit = QTimeEdit()
+    time_edit.setDisplayFormat("HH:mm")
+    time_edit.setTime(QTime(23, 59))
+
+    weekend_format = QTextCharFormat()
+    weekend_format.setForeground(QColor("#cf8085"))
+
+    calendar.setWeekdayTextFormat(Qt.DayOfWeek.Saturday, weekend_format)
+    calendar.setWeekdayTextFormat(Qt.DayOfWeek.Sunday, weekend_format)
+
+    buttons = QDialogButtonBox(
+        QDialogButtonBox.StandardButton.Ok |
+        QDialogButtonBox.StandardButton.Cancel
+    )
+
+    layout.addWidget(calendar)
+    layout.addWidget(time_edit)
+    layout.addWidget(buttons)
+
+    result = {"deadline": None}
+
+    def accept():
+        date = calendar.selectedDate()
+        time = time_edit.time()
+        result["deadline"] = QDateTime(date, time)
+        dialog.accept()
+
+    buttons.accepted.connect(accept)
+    buttons.rejected.connect(dialog.reject)
+
+    dialog.exec()
+    return result["deadline"]
 
 # recolors an SVG file with the specified color and returns a QPixmap
 def recolor(color, svg_path):

@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import Qt, QRect, pyqtSignal
-from PyQt6.QtGui import QGuiApplication, QPainter, QColor
+from PyQt6.QtGui import QGuiApplication, QPainter, QColor, QFont
 
 from . import layout
 import logic
@@ -11,6 +11,9 @@ class TasksPanel(QWidget):
 
         if not uid:
             return
+        
+        self.show_completed = True  # default
+        self.selected_deadline = None # default
 
         panel_width = QGuiApplication.primaryScreen().geometry().width() * (5/6)
         panel_height = QGuiApplication.primaryScreen().geometry().height()
@@ -69,7 +72,6 @@ class TasksPanel(QWidget):
         left_layout.addWidget(folder_list)
 
         # change folder
-        self.show_completed = True  # default
         def on_folder_changed():
             item = folder_list.currentItem()
             if not item:
@@ -78,20 +80,20 @@ class TasksPanel(QWidget):
             folder_name = item.text()
             folder_id = item.data(Qt.ItemDataRole.UserRole)
 
-            if folder_name == "all":
-                logic.populate_task_list(task_list, uid, "all", show_completed=self.show_completed)
+            if folder_name == "All":
+                logic.populate_task_list(task_list, uid, "All", show_completed=self.show_completed)
                 folder_dropdown.clear()
                 for i in range(folder_list.count()):
                     it = folder_list.item(i)
                     name = it.text()
                     fid = it.data(Qt.ItemDataRole.UserRole)
-                    if name not in ["all"]:
+                    if name not in ["All"]:
                         folder_dropdown.addItem(name, userData=(fid, colors[i]))
 
-            elif folder_name == "uncategorized":
+            elif folder_name == "Uncategorized":
                 logic.populate_task_list(task_list, uid, None, show_completed=self.show_completed)
                 folder_dropdown.clear()
-                folder_dropdown.addItem("uncategorized", userData=(None, "#ebe6e8"))
+                folder_dropdown.addItem("Uncategorized", userData=(None, "#ebe6e8"))
 
             else:
                 logic.populate_task_list(task_list, uid, folder_id, show_completed=self.show_completed)
@@ -112,7 +114,7 @@ class TasksPanel(QWidget):
         folder_input_layout = QHBoxLayout()
         folder_input = QLineEdit()
         folder_input.setFixedHeight(header_height)
-        folder_input.setPlaceholderText("add folder")
+        folder_input.setPlaceholderText("Add folder")
         folder_input.setObjectName("tasks_folderInput")
         folder_input_layout.addWidget(folder_input)
 
@@ -148,27 +150,37 @@ class TasksPanel(QWidget):
         task_input_layout = QHBoxLayout()
         task_input_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        add_task_input = QLineEdit()
-        add_task_input.setPlaceholderText("add task")
+        add_task_input = QLineEdit() # add task textbox
+        add_task_input.setPlaceholderText("Add task")
         add_task_input.setFixedHeight(header_height)
-        add_task_input.setFixedWidth(int(right_width * 0.9 * 0.75))  # 3/4 of original width
+        add_task_input.setFixedWidth(int(right_width * 0.9 * 0.75) - header_height)
         add_task_input.setFont(font)
         add_task_input.setObjectName("tasks_addTaskInput")
 
-        folder_dropdown = QComboBox()
+        add_task_input.returnPressed.connect(lambda: logic.add_task(add_task_input, folder_dropdown, task_list, uid, self.selected_deadline))
+
+        folder_dropdown = QComboBox() # folder selection dropdown
         folder_dropdown.setFixedHeight(header_height)
-        folder_dropdown.setFixedWidth(int(right_width * 0.9 * 0.25))  # 1/4 of original width
+        folder_dropdown.setFixedWidth(int(right_width * 0.9 * 0.25))
         folder_dropdown.setObjectName("tasks_folderDropdown")
 
         for folder_name, folder_id, folder_color in folders_from_db:
-            if folder_name not in ["all"]:
+            if folder_name not in ["All"]:
                 folder_dropdown.addItem(folder_name, userData=(folder_id, folder_color))
+
+        deadline_btn = QPushButton("📅") # deadline selection
+        deadline_btn.setFixedSize(header_height, header_height)
+        deadline_btn.setObjectName("tasks_deadlineBtn")
+
+        deadline_btn.clicked.connect(
+            lambda: setattr(self, "selected_deadline", logic.pick_deadline(self))
+        )
 
         task_input_layout.addWidget(add_task_input)
         task_input_layout.addWidget(folder_dropdown)
+        task_input_layout.addWidget(deadline_btn)
         
         right_layout.addLayout(task_input_layout)
-        add_task_input.returnPressed.connect(lambda: logic.add_task(add_task_input, folder_dropdown, task_list, uid))
 
         # task checklist
         task_list = QListWidget()
@@ -189,14 +201,14 @@ class TasksPanel(QWidget):
                 if not current_item:
                     return
                 folder_name = current_item.text()
-                folder_id = "all" if folder_name == "all" else None if folder_name == "uncategorized" else current_item.data(Qt.ItemDataRole.UserRole)
+                folder_id = "All" if folder_name == "All" else None if folder_name == "Uncategorized" else current_item.data(Qt.ItemDataRole.UserRole)
                 logic.populate_task_list(task_list, uid, folder_id, show_completed=self.show_completed)
 
         delegate.taskToggled.connect(refresh_tasks)
 
         # task management / right click
         task_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        task_list.customContextMenuRequested.connect(lambda pos: logic.show_task_menu(task_list, pos, folder_list, SimpleSVGCheckDelegate))
+        task_list.customContextMenuRequested.connect(lambda pos: logic.show_task_menu(task_list, pos, folder_list))
 
         right_layout.addWidget(task_list, alignment=Qt.AlignmentFlag.AlignCenter)
 
@@ -204,7 +216,7 @@ class TasksPanel(QWidget):
         bottom_btn_layout = QHBoxLayout()
         bottom_btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        show_completed_btn = QPushButton("hide completed tasks" if self.show_completed else "show completed tasks")
+        show_completed_btn = QPushButton("Hide completed tasks" if self.show_completed else "Show completed tasks")
         show_completed_btn.setFixedHeight(header_height)
         show_completed_btn.setFixedWidth(150)
         show_completed_btn.setObjectName("tasks_showCompletedBtn")
@@ -212,23 +224,24 @@ class TasksPanel(QWidget):
 
         def toggle_show_completed():
             self.show_completed = not self.show_completed
-            show_completed_btn.setText("hide completed" if self.show_completed else "show completed")
+            show_completed_btn.setText("Hide completed" if self.show_completed else "Show completed")
+
             # re-populate task list with current folder
             current_folder_item = folder_list.currentItem()
             if not current_folder_item:
                 return
             folder_name = current_folder_item.text()
             folder_id = current_folder_item.data(Qt.ItemDataRole.UserRole)
-            if folder_name == "all":
-                folder_id = "all"
-            elif folder_name == "uncategorized":
+            if folder_name == "All":
+                folder_id = "All"
+            elif folder_name == "Uncategorized":
                 folder_id = None
             logic.populate_task_list(task_list, uid, folder_id, show_completed=self.show_completed)
 
         show_completed_btn.clicked.connect(toggle_show_completed)
 
         # delete completed button
-        delete_completed_btn = QPushButton("delete completed tasks")
+        delete_completed_btn = QPushButton("Delete completed tasks")
         delete_completed_btn.setFixedHeight(header_height)
         delete_completed_btn.setFixedWidth(180)
         delete_completed_btn.setObjectName("tasks_deleteCompletedBtn")
@@ -254,9 +267,9 @@ class TasksPanel(QWidget):
             folder_name = current_item.text()
             folder_id = current_item.data(Qt.ItemDataRole.UserRole)
 
-            if folder_name == "all":
-                folder_id = "all"
-            elif folder_name == "uncategorized":
+            if folder_name == "All":
+                folder_id = "All"
+            elif folder_name == "Uncategorized":
                 folder_id = None
 
             logic.delete_completed_tasks(uid, folder_id)
@@ -351,11 +364,38 @@ class SimpleSVGCheckDelegate(QStyledItemDelegate):
         painter.drawPixmap(x, y, checkbox_size, checkbox_size, pixmap)
 
         # draw the text
-        text_rect = option.rect.adjusted(checkbox_size + 4, 0, 0, 0)
-        display_text = index.data(Qt.ItemDataRole.DisplayRole)
+        display_text = index.data(Qt.ItemDataRole.DisplayRole)  # task title
+        deadline = index.data(Qt.ItemDataRole.UserRole + 2)     # stored deadline
+
+        rect = option.rect
         if display_text:
-            painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, display_text)
-        
+            painter.drawText(
+                QRect(rect.left() + checkbox_size + 4, rect.top(), rect.width() // 2, rect.height()),
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                display_text
+            )
+
+        if deadline:
+            painter.save()
+
+            # set pen color with 50% opacity
+            color = QColor(option.palette.color(option.palette.ColorRole.Text))
+            color.setAlphaF(0.5)
+            painter.setPen(color)
+
+            # set normal font weight
+            font = option.font
+            font.setWeight(QFont.Weight.Normal)  # normal weight
+            painter.setFont(font)
+
+            painter.drawText(
+                QRect(rect.left() + rect.width() // 2, rect.top(), rect.width() // 2 - 4, rect.height()),
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
+                deadline.toString("MM/dd/yy HH:mm")
+            )
+
+            painter.restore()  # restore painter state
+
     def editorEvent(self, event, model, option, index):
         if event.type() == event.Type.MouseButtonRelease:
             checkbox_size = self.get_checkbox_size(option)

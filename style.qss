@@ -157,3 +157,56 @@ QMessageBox QPushButton {
     border-radius: 5px;
     padding: 5px;
 }
+
+QCalendarWidget {
+    background-color: #212121;
+    color: #ebe6e8;
+    border: 0;
+}
+
+QCalendarWidget QWidget {
+    background-color: #382f33;
+}
+
+QCalendarWidget QToolButton {
+    color: #ebe6e8;
+    background-color: transparent;
+    border: none;
+    font-family: "Inter";
+    font-weight: bold;
+    padding-right: 10px;
+}
+
+QCalendarWidget QMenu {
+    background-color: #313131;
+    color: #ebe6e8;
+}
+
+QCalendarWidget QAbstractItemView {
+    background-color: #3e393b;
+    color: #ebe6e8;
+    selection-background-color: #382f33;
+    border: none;
+    border-radius: 10px;
+}
+
+QTimeEdit {
+    background-color: #382f33;
+    color: #ebe6e8;
+    font-family: "Inter";
+    padding: 6px;
+    border-radius: 8px;
+    border: 0;
+}
+
+QTimeEdit::up-button,
+QTimeEdit::down-button {
+    width: 0px;
+    height: 0px;
+    border: none;
+}
+
+QTimeEdit::up-arrow,
+QTimeEdit::down-arrow {
+    image: none;
+}
