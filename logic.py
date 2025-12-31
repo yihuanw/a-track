@@ -246,7 +246,7 @@ def show_folder_menu(folder_list, pos, colors, CircleDelegate, folder_dropdown, 
             client.table("folders").update({"name": new_name.strip()}).eq("user_id", uid).eq("name", item.text()).execute()
             item.setText(new_name.strip())
 
-# shows a context menu for tasks with option to delete, change folder, or rename
+# shows a context menu for tasks with option to delete, change folder, change deadline, or rename
 def show_task_menu(task_list, pos, folder_list):
     item = task_list.itemAt(pos)
     if not item:
@@ -256,6 +256,7 @@ def show_task_menu(task_list, pos, folder_list):
     menu = QMenu()
     delete_action = menu.addAction("Delete task")
     change_folder_action = menu.addAction("Change folder")
+    change_deadline_action = menu.addAction("Change deadline")
     change_title_action = menu.addAction("Change title")
 
     action = menu.exec(task_list.mapToGlobal(pos))
@@ -304,6 +305,26 @@ def show_task_menu(task_list, pos, folder_list):
                         new_color = delegate.colors[folder_row]
                         item.setData(Qt.ItemDataRole.UserRole + 1, new_color)
                         task_list.viewport().update()
+    
+    elif action == change_deadline_action:
+        task_id = item.data(Qt.ItemDataRole.UserRole)
+        if not task_id:
+            return
+
+        current_deadline = item.data(Qt.ItemDataRole.UserRole + 2)
+        new_deadline = pick_deadline(task_list)
+        if new_deadline is None:
+            return
+
+        new_deadline_utc = new_deadline.toUTC()
+
+        client.table("tasks").update({
+            "deadline": new_deadline_utc.toString(Qt.DateFormat.ISODate)
+        }).eq("id", task_id).execute()
+
+        item.setData(Qt.ItemDataRole.UserRole + 2, new_deadline)
+
+        task_list.viewport().update()
     
     elif action == change_title_action:
         new_title, ok = QInputDialog.getText(
