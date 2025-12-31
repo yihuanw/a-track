@@ -31,7 +31,7 @@ class TasksPanel(QWidget):
         main_layout.setSpacing(20)
 
         # --------------------------- left rectangle ---------------------------
-
+        
         # left rectangle
         self.left_rect = QWidget()
         self.left_rect.setFixedSize(left_width, rect_height)
@@ -218,7 +218,6 @@ class TasksPanel(QWidget):
         
         show_completed_btn = QPushButton("Hide completed tasks" if self.show_completed else "Show completed tasks")
         show_completed_btn.setFixedHeight(header_height)
-        show_completed_btn.setFixedWidth(150)
         show_completed_btn.setObjectName("tasks_showCompletedBtn")
         bottom_btn_layout.addWidget(show_completed_btn)
 
@@ -243,7 +242,6 @@ class TasksPanel(QWidget):
         # delete completed button
         delete_completed_btn = QPushButton("Delete completed tasks")
         delete_completed_btn.setFixedHeight(header_height)
-        delete_completed_btn.setFixedWidth(180)
         delete_completed_btn.setObjectName("tasks_deleteCompletedBtn")
         bottom_btn_layout.addWidget(delete_completed_btn)
         right_layout.addLayout(bottom_btn_layout)

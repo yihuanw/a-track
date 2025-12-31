@@ -127,26 +127,31 @@ def populate_task_list(task_list, uid, folder_id="All", show_completed=True):
 
     response = query.execute()
 
+    tasks = []
     for row in response.data or []:
         if not show_completed and row.get("completed"):
             continue  # skip completed tasks if toggle off
-
-        display_text = row["title"]
-
-        item = QListWidgetItem(display_text)
-        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-        item.setCheckState(Qt.CheckState.Checked if row.get("completed") else Qt.CheckState.Unchecked)
-        item.setData(Qt.ItemDataRole.UserRole, row["id"])
-        item.setData(Qt.ItemDataRole.UserRole + 1, (row.get("folders") or {}).get("color"))
 
         deadline = row.get("deadline")  # can be None
         if deadline:
             # convert ISO string to QDateTime
             dt = QDateTime.fromString(deadline, Qt.DateFormat.ISODate)
             dt = dt.toLocalTime()
-            item.setData(Qt.ItemDataRole.UserRole + 2, dt)
         else:
-            item.setData(Qt.ItemDataRole.UserRole + 2, None)
+            dt = None
+
+        tasks.append((row, dt))
+
+    tasks.sort(key=lambda x: (x[1] is not None, x[1] or QDateTime()))  
+    for row, deadline_dt in tasks:
+        title = row["title"]
+
+        item = QListWidgetItem(title)
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        item.setCheckState(Qt.CheckState.Checked if row.get("completed") else Qt.CheckState.Unchecked)
+        item.setData(Qt.ItemDataRole.UserRole, row["id"])
+        item.setData(Qt.ItemDataRole.UserRole + 1, (row.get("folders") or {}).get("color"))
+        item.setData(Qt.ItemDataRole.UserRole + 2, deadline_dt)  # None if no deadline
 
         task_list.addItem(item)
 

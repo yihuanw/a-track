@@ -19,6 +19,8 @@ QPushButton {
     background-color: #4b4648;
     border: none;
     border-radius: 10px;
+    padding-left: 10px;
+    padding-right: 10px;
 }
 
 QPushButton QLabel {

@@ -41,37 +41,45 @@ def refresh_session():
     global _cached_session, _cached_client
     if not os.path.exists(SESSION_FILE):
         return None
-    
+
     try:
         with open(SESSION_FILE, "r") as f:
             data = json.load(f)
-        
+
         supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-        
-        # set the session
-        supabase.auth.set_session(data.get("access_token"), data.get("refresh_token"))
-        
-        # try to get user to check if token is valid
-        user_response = supabase.auth.get_user()
-        
-        if user_response.user:
-            # update session file with current tokens
-            current_session = supabase.auth.get_session()
-            if current_session:
-                updated_data = {
-                    "access_token": current_session.access_token,
-                    "refresh_token": current_session.refresh_token,
-                    "uid": user_response.user.id
-                }
-                with open(SESSION_FILE, "w") as f:
-                    json.dump(updated_data, f)
-                _cached_session = updated_data
-                _cached_client = supabase
-                return updated_data
+
+        refresh_token = data.get("refresh_token")
+        if not refresh_token:
+            return None
+
+        # Refresh session
+        response = supabase.auth.refresh_session(refresh_token)
+
+        # The new session is inside response.session
+        session = response.session
+        if not session:
+            return None
+
+        updated_data = {
+            "access_token": session.access_token,
+            "refresh_token": session.refresh_token,
+            "uid": session.user.id
+        }
+
+        # Save updated tokens
+        with open(SESSION_FILE, "w") as f:
+            json.dump(updated_data, f)
+
+        # Set new session in client
+        supabase.auth.set_session(session.access_token, session.refresh_token)
+
+        _cached_session = updated_data
+        _cached_client = supabase
+        return updated_data
+
     except Exception as e:
         print(f"session refresh failed: {e}")
-    
-    return None
+        return None
 
 # gets supabase client for target uid
 def get_user_client():
@@ -80,35 +88,12 @@ def get_user_client():
         return _cached_client
 
     # try to refresh session first
-    refresh_session()
-    
-    if not os.path.exists(SESSION_FILE):
-        print("no session file found")
+    refreshed = refresh_session()
+    if not refreshed:
+        print("No valid session, please login")
         return None
-    
-    try:
-        with open(SESSION_FILE, "r") as f:
-            data = json.load(f)
-        
-        access_token = data.get("access_token")
-        
-        if not access_token:
-            print("no access token in session")
-            return None
-        
-        # create client with auth header
-        supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-        
-        # set the session
-        supabase.auth.set_session(access_token, data.get("refresh_token"))
-        
-        _cached_client = supabase
-        _cached_session = data
-        
-        return supabase
-    except Exception as e:
-        print(f"error creating authenticated client: {e}")
-        return None
+
+    return _cached_client
 
 # fetches user id
 def get_uid():
