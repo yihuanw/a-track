@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import *
-from PyQt6.QtCore import Qt, QRect, pyqtSignal
-from PyQt6.QtGui import QGuiApplication, QPainter, QColor, QFont
+from PyQt6.QtCore import Qt, QRect, pyqtSignal, QDateTime
+from PyQt6.QtGui import QGuiApplication, QPainter, QColor, QFont, QIcon
 
 from . import layout
 import logic
@@ -168,7 +168,8 @@ class TasksPanel(QWidget):
             if folder_name not in ["All"]:
                 folder_dropdown.addItem(folder_name, userData=(folder_id, folder_color))
 
-        deadline_btn = QPushButton("📅") # deadline selection
+        deadline_btn = QPushButton() # deadline selection
+        deadline_btn.setIcon(QIcon(logic.path("assets/icon/calendar.png")))
         deadline_btn.setFixedSize(header_height, header_height)
         deadline_btn.setObjectName("tasks_deadlineBtn")
 
@@ -376,23 +377,26 @@ class SimpleSVGCheckDelegate(QStyledItemDelegate):
         if deadline:
             painter.save()
 
-            # set pen color with 50% opacity
-            color = QColor(option.palette.color(option.palette.ColorRole.Text))
-            color.setAlphaF(0.5)
+            # check if deadline passed
+            is_overdue = deadline < QDateTime.currentDateTime()
+
+            color = QColor("#cf8085" if is_overdue
+                        else option.palette.color(option.palette.ColorRole.Text))
+            color.setAlphaF(0.75)
             painter.setPen(color)
 
-            # set normal font weight
             font = option.font
-            font.setWeight(QFont.Weight.Normal)  # normal weight
+            font.setWeight(QFont.Weight.Normal)
             painter.setFont(font)
 
             painter.drawText(
-                QRect(rect.left() + rect.width() // 2, rect.top(), rect.width() // 2 - 4, rect.height()),
+                QRect(rect.left() + rect.width() // 2, rect.top(),
+                    rect.width() // 2 - 4, rect.height()),
                 Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
                 deadline.toString("MM/dd/yy HH:mm")
             )
 
-            painter.restore()  # restore painter state
+            painter.restore()
 
     def editorEvent(self, event, model, option, index):
         if event.type() == event.Type.MouseButtonRelease:

@@ -80,12 +80,15 @@ def add_task(add_task_input, folder_dropdown, task_list, uid, deadline_qdt=None)
         return
 
     task_data = response.data[0]
+
     item = QListWidgetItem(task_data["title"])
     item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
     item.setCheckState(Qt.CheckState.Checked if task_data.get("completed") else Qt.CheckState.Unchecked)
     item.setData(Qt.ItemDataRole.UserRole, task_data["id"])
     item.setData(Qt.ItemDataRole.UserRole + 1, folder_color)
+    item.setData(Qt.ItemDataRole.UserRole + 2, deadline_qdt)
     task_list.addItem(item)
+    task_list.viewport().update()
 
     add_task_input.clear()
     deadline_qdt = None
@@ -316,7 +319,6 @@ def show_task_menu(task_list, pos, folder_list):
         if not task_id:
             return
 
-        current_deadline = item.data(Qt.ItemDataRole.UserRole + 2)
         new_deadline = pick_deadline(task_list)
         if new_deadline is None:
             return
