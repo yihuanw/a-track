@@ -1,10 +1,15 @@
 import sys
 import os
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QCoreApplication
 from PyQt6.QtGui import QFontDatabase
 from ui import MainWindow
 
 app = QApplication(sys.argv)
+
+QCoreApplication.setOrganizationName("a-track")
+QCoreApplication.setApplicationName("a-track")
+
 app.setStyle("windows11")
 window = MainWindow()
 

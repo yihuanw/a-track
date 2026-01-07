@@ -1,13 +1,24 @@
 import os, json, sys
 from dotenv import load_dotenv
 from supabase import create_client
+from pathlib import Path
+from PyQt6.QtCore import QStandardPaths
 
 base_path = getattr(sys, "_MEIPASS", os.path.dirname(__file__))
 load_dotenv(os.path.join(base_path, ".env"))
 
+# fetches path towards session.json
+def get_session_path():
+    base = Path(QStandardPaths.writableLocation(
+        QStandardPaths.StandardLocation.AppDataLocation
+    ))
+    base.mkdir(parents=True, exist_ok=True)
+    return base / "session.json"
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
-SESSION_FILE = "session.json"
+SESSION_FILE = get_session_path()
+APP_NAME = "a-track"
 
 _cached_client = None
 _cached_session = None
@@ -26,7 +37,7 @@ def login(email: str, password: str):
                     "refresh_token": session.refresh_token,
                     "uid": response.user.id
                 }
-                with open(SESSION_FILE, "w") as f:
+                with SESSION_FILE.open("w") as f:
                     json.dump(data, f)
                 print("logged in successfully")
                 return True
@@ -39,11 +50,11 @@ def login(email: str, password: str):
 # refreshes current session
 def refresh_session():
     global _cached_session, _cached_client
-    if not os.path.exists(SESSION_FILE):
+    if not SESSION_FILE.exists():
         return None
 
     try:
-        with open(SESSION_FILE, "r") as f:
+        with SESSION_FILE.open("r") as f:
             data = json.load(f)
 
         supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
@@ -52,10 +63,9 @@ def refresh_session():
         if not refresh_token:
             return None
 
-        # Refresh session
+        # refresh session
         response = supabase.auth.refresh_session(refresh_token)
 
-        # The new session is inside response.session
         session = response.session
         if not session:
             return None
@@ -66,11 +76,11 @@ def refresh_session():
             "uid": session.user.id
         }
 
-        # Save updated tokens
-        with open(SESSION_FILE, "w") as f:
+        # save updated tokens
+        with SESSION_FILE.open("w") as f:
             json.dump(updated_data, f)
 
-        # Set new session in client
+        # set new session in client
         supabase.auth.set_session(session.access_token, session.refresh_token)
 
         _cached_session = updated_data
@@ -97,21 +107,21 @@ def get_user_client():
 
 # fetches user id
 def get_uid():
-    if not os.path.exists(SESSION_FILE):
+    if not SESSION_FILE.exists():
         return None
     try:
-        with open(SESSION_FILE, "r") as f:
+        with SESSION_FILE.open("r") as f:
             return json.load(f).get("uid")
     except Exception:
         return None
 
 # checks whether there is an existing session
 def has_valid_session():
-    if not os.path.exists(SESSION_FILE):
+    if not SESSION_FILE.exists():
         return False
 
     try:
-        with open(SESSION_FILE, "r") as f:
+        with SESSION_FILE.open("r") as f:
             data = json.load(f)
 
         supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
