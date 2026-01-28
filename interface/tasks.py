@@ -224,7 +224,7 @@ class TasksPanel(QWidget):
 
         def toggle_show_completed():
             self.show_completed = not self.show_completed
-            show_completed_btn.setText("Hide completed" if self.show_completed else "Show completed")
+            show_completed_btn.setText("Hide completed tasks" if self.show_completed else "Show completed tasks")
 
             # re-populate task list with current folder
             current_folder_item = folder_list.currentItem()
