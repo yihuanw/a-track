@@ -37,6 +37,7 @@ class MainWindow(QWidget):
         self.logout_button.setObjectName("logoutButton")
         self.logout_button.clicked.connect(self.handle_logout)
         left_layout.addWidget(self.logout_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+        left_layout.setContentsMargins(0, 20, 0, 20)
 
         # right layout
         right_layout = QVBoxLayout(self.right)

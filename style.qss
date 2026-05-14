@@ -1,6 +1,5 @@
 #leftPanel {
     background-color: #313131;
-    padding: 20px;
 }
 
 #rightPanel {
@@ -11,8 +10,14 @@
     color: #b39ba5;
     font-family: "Inter";
     font-weight: bold;
-    padding-top: 20px;
     padding-bottom: 10px;
+}
+
+#logoutButton {
+    font-family: "Inter";
+    font-weight: bold;
+    letter-spacing: 1px;
+    color: #ebe6e8;
 }
 
 QPushButton {
@@ -148,13 +153,6 @@ QMenu::item:selected {
     font-family: "Inter";
     font-weight: bold;
     letter-spacing: 1px;
-}
-
-#logoutButton {
-    font-family: "Inter";
-    font-weight: bold;
-    letter-spacing: 1px;
-    color: #ebe6e8;
 }
 
 #prof_errorLabel {

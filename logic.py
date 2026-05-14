@@ -204,3 +204,229 @@ def delete_completed_tasks(uid, folder_id="All"):
         query = query.eq("folder_id", folder_id)
 
     query.execute()
+
+# shows a context menu for folders with options to delete, change color, or rename
+def show_folder_menu(folder_list, pos, colors, CircleDelegate, folder_dropdown, uid):
+    item = folder_list.itemAt(pos)
+    if not item or item.text() in ["All", "Uncategorized"]:
+        return
+
+    client = get_client()
+    folder_name = item.text()
+    row = folder_list.row(item)
+
+    menu = QMenu()
+    delete_action = menu.addAction("Delete folder")
+    change_color_action = menu.addAction("Change color")
+    rename_action = menu.addAction("Rename folder")
+
+    action = menu.exec(folder_list.mapToGlobal(pos))
+
+    if action == delete_action:
+        msg = QMessageBox(folder_list)
+        msg.setWindowTitle("Delete folder")
+        msg.setText("Manage tasks in folder")
+        delete_tasks_btn = msg.addButton("Delete all tasks", QMessageBox.ButtonRole.DestructiveRole)
+        move_tasks_btn = msg.addButton("Move to uncategorized", QMessageBox.ButtonRole.ActionRole)
+        cancel_btn = msg.addButton(QMessageBox.StandardButton.Cancel)
+        msg.exec()
+
+        if msg.clickedButton() == cancel_btn:
+            return
+
+        folder_res = (
+            client.table("folders")
+            .select("id")
+            .eq("user_id", uid)
+            .eq("name", folder_name)
+            .execute()
+        )
+
+        if not folder_res.data:
+            return
+
+        folder_id = folder_res.data[0]["id"]
+
+        if msg.clickedButton() == delete_tasks_btn:
+            client.table("tasks").delete().eq("folder_id", folder_id).execute()
+
+        elif msg.clickedButton() == move_tasks_btn:
+            client.table("tasks").update(
+                {"folder_id": None}
+            ).eq("folder_id", folder_id).execute()
+
+        client.table("folders").delete().eq("id", folder_id).execute()
+
+        for i in range(folder_dropdown.count()):
+            if folder_dropdown.itemText(i) == folder_name:
+                folder_dropdown.removeItem(i)
+                break
+
+        folder_list.takeItem(row)
+        colors.pop(row)
+        folder_list.setItemDelegate(CircleDelegate(colors, folder_list))
+
+    elif action == change_color_action:
+        color = QColorDialog.getColor()
+        if color.isValid():
+            new_color = color.name()
+            client.table("folders").update({"color": new_color}).eq("user_id", uid).eq("name", item.text()).execute()
+            colors[row] = new_color
+            folder_list.setItemDelegate(CircleDelegate(colors, folder_list))
+            
+    elif action == rename_action:
+        new_name, ok = QInputDialog.getText(
+            folder_list, "Rename Folder", "New folder name:", text=item.text()
+        )
+        if ok and new_name.strip():
+            client.table("folders").update({"name": new_name.strip()}).eq("user_id", uid).eq("name", item.text()).execute()
+            item.setText(new_name.strip())
+
+# shows a context menu for tasks with option to delete, change folder, change deadline, or rename
+def show_task_menu(task_list, pos, folder_list):
+    item = task_list.itemAt(pos)
+    if not item:
+        return
+
+    client = get_client()
+    menu = QMenu()
+    delete_action = menu.addAction("Delete task")
+    change_folder_action = menu.addAction("Change folder")
+    change_deadline_action = menu.addAction("Change deadline")
+    change_title_action = menu.addAction("Change title")
+
+    action = menu.exec(task_list.mapToGlobal(pos))
+
+    if action == delete_action:
+        task_id = item.data(Qt.ItemDataRole.UserRole)
+        if task_id:
+            client.table("tasks").delete().eq("id", task_id).execute()
+        task_list.takeItem(task_list.row(item))
+
+    elif action == change_folder_action:
+        if folder_list is None:
+            return
+
+        folders = []
+        for i in range(folder_list.count()):
+            f_item = folder_list.item(i)
+            f_name = f_item.text()
+            f_id = f_item.data(Qt.ItemDataRole.UserRole)
+            if f_name not in ["All"]:
+                folders.append((f_name, f_id))
+
+        folder_names = [f[0] for f in folders]
+        if not folder_names:
+            return
+
+        choice, ok = QInputDialog.getItem(
+            task_list, "Change Task Folder", "Select new folder:", folder_names, 0, False
+        )
+        if ok:
+            selected_folder_name, selected_folder_id = next((f[0], f[1]) for f in folders if f[0] == choice)
+            task_id = item.data(Qt.ItemDataRole.UserRole)
+            if task_id:
+                client.table("tasks").update({"folder_id": selected_folder_id}).eq("id", task_id).execute()
+
+                folder_row = -1
+                for i in range(folder_list.count()):
+                    if folder_list.item(i).text() == selected_folder_name:
+                        folder_row = i
+                        break
+                
+                if folder_row >= 0:
+                    delegate = folder_list.itemDelegate()
+                    
+                    if delegate and hasattr(delegate, 'colors'):
+                        new_color = delegate.colors[folder_row]
+                        item.setData(Qt.ItemDataRole.UserRole + 1, new_color)
+                        task_list.viewport().update()
+    
+    elif action == change_deadline_action:
+        task_id = item.data(Qt.ItemDataRole.UserRole)
+        if not task_id:
+            return
+
+        new_deadline = pick_deadline(task_list)
+        if new_deadline is None:
+            return
+
+        new_deadline_utc = new_deadline.toUTC()
+
+        client.table("tasks").update({
+            "deadline": new_deadline_utc.toString(Qt.DateFormat.ISODate)
+        }).eq("id", task_id).execute()
+
+        item.setData(Qt.ItemDataRole.UserRole + 2, new_deadline)
+
+        task_list.viewport().update()
+    
+    elif action == change_title_action:
+        new_title, ok = QInputDialog.getText(
+            task_list, "Change Task Title", "New title:", text=item.text()
+        )
+        if ok and new_title.strip():
+            task_id = item.data(Qt.ItemDataRole.UserRole)
+            if task_id:
+                client.table("tasks").update({"title": new_title.strip()}).eq("id", task_id).execute()
+            item.setText(new_title.strip())
+
+# deadline selection calendar
+def pick_deadline(parent):
+    dialog = QDialog(parent)
+    dialog.setWindowTitle("Set deadline")
+    layout = QVBoxLayout(dialog)
+
+    calendar = QCalendarWidget()
+    time_edit = QTimeEdit()
+    time_edit.setDisplayFormat("HH:mm")
+    time_edit.setTime(QTime(23, 59))
+
+    weekend_format = QTextCharFormat()
+    weekend_format.setForeground(QColor("#cf8085"))
+
+    calendar.setWeekdayTextFormat(Qt.DayOfWeek.Saturday, weekend_format)
+    calendar.setWeekdayTextFormat(Qt.DayOfWeek.Sunday, weekend_format)
+
+    buttons = QDialogButtonBox(
+        QDialogButtonBox.StandardButton.Ok |
+        QDialogButtonBox.StandardButton.Cancel
+    )
+
+    layout.addWidget(calendar)
+    layout.addWidget(time_edit)
+    layout.addWidget(buttons)
+
+    result = {"deadline": None}
+
+    def accept():
+        date = calendar.selectedDate()
+        time = time_edit.time()
+        result["deadline"] = QDateTime(date, time)
+        dialog.accept()
+
+    buttons.accepted.connect(accept)
+    buttons.rejected.connect(dialog.reject)
+
+    dialog.exec()
+    return result["deadline"]
+
+# recolors an SVG file with the specified color and returns a QPixmap
+def recolor(color, svg_path):
+    renderer = QSvgRenderer(svg_path)
+    size = renderer.defaultSize()
+    pixmap = QPixmap(size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(pixmap)
+    renderer.render(painter)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(pixmap.rect(), QColor(color))
+    painter.end()
+    return pixmap
+
+# opens a color picker dialog and calls a callback with the chosen color
+def pick_color(set_color_callback):
+    color = QColorDialog.getColor()
+    if color.isValid():
+        set_color_callback(color.name())
