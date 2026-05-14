@@ -32,10 +32,9 @@ class MainWindow(QWidget):
         left_layout.addWidget(self.header, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         # buttons
-        btn_cal = layout.IconTextButton(logic.path("assets/icon/calendar.png"), "Calendar")
         btn_tasks = layout.IconTextButton(logic.path("assets/icon/tasks.png"), "Tasks")
         btn_prof = layout.IconTextButton(logic.path("assets/icon/profile.png"), "Profile")
-        self.buttons = [btn_cal, btn_tasks, btn_prof]
+        self.buttons = [btn_tasks, btn_prof]
 
         for btn in self.buttons:
             left_layout.addWidget(btn, alignment=Qt.AlignmentFlag.AlignHCenter)
