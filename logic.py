@@ -5,17 +5,14 @@ from PyQt6.QtSvg import QSvgRenderer
 from db import get_user_client
 import sys, os
 
-
 # ---------------- client ----------------
 def get_client():
     return get_user_client()
-
 
 # ---------------- path helper ----------------
 def path(*paths):
     base = getattr(sys, "frozen", False) and sys._MEIPASS or os.path.dirname(__file__)
     return os.path.join(base, *paths)
-
 
 # ---------------- folders ----------------
 def get_folders(uid):
@@ -30,7 +27,6 @@ def get_folders(uid):
     folders.insert(0, ("All", None, None))
     folders.append(("Uncategorized", None, "#ebe6e8"))
     return folders
-
 
 def add_folder(folder_input, color, folder_list, color_list,
                CircleDelegate, folder_dropdown, uid):
@@ -104,7 +100,6 @@ def add_task(add_task_input, folder_dropdown, task_list, uid, deadline_qdt=None)
 
     add_task_input.clear()
 
-
 def fetch_tasks(uid):
     client = get_client()
 
@@ -127,7 +122,6 @@ def fetch_tasks(uid):
         ))
 
     return tasks
-
 
 def populate_task_list(task_list, uid, folder_id="All", show_completed=True):
     task_list.clear()
@@ -178,7 +172,32 @@ def populate_task_list(task_list, uid, folder_id="All", show_completed=True):
 
         task_list.addItem(item)
 
-
+# populates the task list widget from already-fetched data (avoids a second DB call)
+def populate_task_list_from_data(task_list, tasks_data, show_completed=True):
+    """
+    tasks_data: list of (id, title, completed, folder_id, folder_color)
+    as returned by fetch_tasks().
+    """
+    task_list.clear()
+ 
+    items = []
+    for row in tasks_data:
+        task_id, title, completed, folder_id, folder_color = row
+        if not show_completed and completed:
+            continue
+        items.append((task_id, title, completed, folder_color, None))  # no deadline in fetch_tasks
+ 
+    for task_id, title, completed, folder_color, deadline_dt in items:
+        item = QListWidgetItem(title)
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        item.setCheckState(
+            Qt.CheckState.Checked if completed else Qt.CheckState.Unchecked
+        )
+        item.setData(Qt.ItemDataRole.UserRole, task_id)
+        item.setData(Qt.ItemDataRole.UserRole + 1, folder_color)
+        item.setData(Qt.ItemDataRole.UserRole + 2, deadline_dt)
+        task_list.addItem(item)
+ 
 # ---------------- task update ----------------
 def update_task_completion(task_id, completed):
     client = get_client()
@@ -186,7 +205,6 @@ def update_task_completion(task_id, completed):
         .update({"completed": completed}) \
         .eq("id", task_id) \
         .execute()
-
 
 def delete_completed_tasks(uid, folder_id="All"):
     client = get_client()
