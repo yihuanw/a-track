@@ -134,3 +134,11 @@ def has_valid_session():
         return bool(user.user)
     except Exception:
         return False
+
+# logout current user
+def logout():
+    global _cached_client, _cached_session
+    if SESSION_FILE.exists():
+        SESSION_FILE.unlink()
+    _cached_client = None
+    _cached_session = None

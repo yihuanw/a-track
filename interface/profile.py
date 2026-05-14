@@ -92,7 +92,16 @@ class ProfilePanel(QWidget):
         label = QLabel("logged in!")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        # logout button with same formatting as submit button
+        logout_button = QPushButton("logout")
+        logout_button.setObjectName("prof_logoutButton")
+        logout_button.clicked.connect(self.handle_logout)
+
+        # scale fonts consistently
+        layout.scale_buttons([logout_button], 125)  # approximate width for consistency
+
         layout_v.addWidget(label)
+        layout_v.addWidget(logout_button, alignment=Qt.AlignmentFlag.AlignHCenter)
         return page
 
     def handle_login(self):
@@ -107,3 +116,11 @@ class ProfilePanel(QWidget):
             self.stack.setCurrentWidget(self.success_page)
         else:
             self.error_label.setText("invalid credentials")
+
+    def handle_logout(self):
+        # logout and return to login screen
+        db.logout()
+        self.stack.setCurrentWidget(self.login_page)
+        self.email_input.clear()
+        self.password_input.clear()
+        self.error_label.setText("")
