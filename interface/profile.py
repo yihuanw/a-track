@@ -1,11 +1,14 @@
 from PyQt6.QtWidgets import *
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QGuiApplication
 
 from . import layout
 import db
 
 class ProfilePanel(QWidget):
+    # signal emitted when user logs in successfully
+    loginSucceeded = pyqtSignal()
+
     def __init__(self):
         super().__init__()
 
@@ -19,21 +22,9 @@ class ProfilePanel(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # stacked widget to switch between login and success screens
-        self.stack = QStackedWidget()
-        main_layout.addWidget(self.stack)
-
-        # build pages
+        # build login page
         self.login_page = self._build_login_page(panel_width, panel_height)
-        self.success_page = self._build_success_page()
-
-        # add pages to stack
-        self.stack.addWidget(self.login_page)
-        self.stack.addWidget(self.success_page)
-
-        # check for valid session
-        if db.has_valid_session():
-            self.stack.setCurrentWidget(self.success_page)
+        main_layout.addWidget(self.login_page)
 
     def _build_login_page(self, panel_width, panel_height):
         # login screen container
@@ -83,26 +74,9 @@ class ProfilePanel(QWidget):
 
         return page
 
-    def _build_success_page(self):
-        # screen shown after successful login
-        page = QWidget()
-        layout_v = QVBoxLayout(page)
-        layout_v.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        label = QLabel("logged in!")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        # logout button with same formatting as submit button
-        logout_button = QPushButton("logout")
-        logout_button.setObjectName("prof_logoutButton")
-        logout_button.clicked.connect(self.handle_logout)
-
-        # scale fonts consistently
-        layout.scale_buttons([logout_button], 125)  # approximate width for consistency
-
-        layout_v.addWidget(label)
-        layout_v.addWidget(logout_button, alignment=Qt.AlignmentFlag.AlignHCenter)
-        return page
+    def try_auto_login(self):
+        if db.has_valid_session():
+            self.loginSucceeded.emit()
 
     def handle_login(self):
         # attempt login with entered credentials
@@ -111,16 +85,17 @@ class ProfilePanel(QWidget):
             self.password_input.text()
         )
 
-        # switch screens or show error
+        # emit signal or show error
         if success:
-            self.stack.setCurrentWidget(self.success_page)
+            self.loginSucceeded.emit()
+            self.email_input.clear()
+            self.password_input.clear()
+            self.error_label.setText("")
         else:
             self.error_label.setText("invalid credentials")
 
-    def handle_logout(self):
-        # logout and return to login screen
-        db.logout()
-        self.stack.setCurrentWidget(self.login_page)
+    def reset_login_form(self):
+        # reset login form for display after logout
         self.email_input.clear()
         self.password_input.clear()
         self.error_label.setText("")
