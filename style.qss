@@ -1,3 +1,4 @@
+/* ---------- Panels ---------- */
 #leftPanel {
     background-color: #313131;
 }
@@ -6,11 +7,14 @@
     background-color: #202020;
 }
 
+/* ---------- Labels & Headers ---------- */
 #headerLabel {
     color: #b39ba5;
     font-family: "Inter";
     font-weight: bold;
-    padding-bottom: 10px;
+    letter-spacing: 1px;
+    padding: 10px;
+    padding-left: 20px;
 }
 
 #logoutButton {
@@ -20,6 +24,7 @@
     color: #ebe6e8;
 }
 
+/* ---------- General Push Buttons ---------- */
 QPushButton {
     background-color: #4b4648;
     border: none;
@@ -39,6 +44,7 @@ QPushButton:hover {
     background-color: #473e43;
 }
 
+/* ---------- Tasks Panel ---------- */
 #tasks_leftRect {
     background-color: #3e393b;
     border-radius: 10px;
@@ -49,19 +55,13 @@ QPushButton:hover {
     border-radius: 10px;
 }
 
-#tasks_header {
-    color: #ebe6e8;
-    font-family: "Inter";
-    font-weight: bold;
-    letter-spacing: 1px;
-    padding: 10px;
-}
-
+/* Folder list */
 #tasks_folderList {
     background: transparent;
     border: 0;
     color: #ebe6e8;
     font-family: "Inter";
+    font-weight: bold;
     padding-left: 10px;
     padding-right: 10px;
 }
@@ -75,6 +75,7 @@ QPushButton:hover {
     background-color: #382f33;
 }
 
+/* Folder dropdown menu */
 QMenu {
     background-color: #313131;
     border: 1px solid #ebe6e8;
@@ -99,31 +100,37 @@ QMenu::item:selected {
     background-color: #202020;
 }
 
+/* Folder input */
 #tasks_folderInput {
     background-color: #382f33;
     color: #ebe6e8;
     font-family: "Inter";
     font-weight: 500;
     padding-left: 10px;
+    padding-right: 10px;
     border: 0;
     border-radius: 10px;
 }
 
+/* Color button */
 #tasks_colorButton {
     background-color: #ebe6e8;
     border: 1px solid #ebe6e8;
 }
 
+/* Add task input */
 #tasks_addTaskInput {
     background-color: #3e393b;
     color: #ebe6e8;
     font-family: "Inter";
     font-weight: 500;
     padding-left: 10px;
+    padding-right: 10px;
     border: 0;
     border-radius: 10px;
 }
 
+/* Task list */
 #tasks_taskList {
     background-color: transparent;
     border: 0;
@@ -139,12 +146,14 @@ QMenu::item:selected {
     background-color: #313131;
 }
 
+/* ---------- Profile Panel ---------- */
 #prof_emailInput, #prof_passwordInput {
     background-color: #382f33;
     color: #ebe6e8;
     font-family: "Inter";
     font-weight: 500;
     padding-left: 10px;
+    padding-right: 10px;
     border: 0;
     border-radius: 10px;
 }
@@ -160,11 +169,13 @@ QMenu::item:selected {
     font-family: "Inter";
 }
 
+/* ---------- Message Box ---------- */
 QMessageBox QPushButton {
     border-radius: 5px;
     padding: 5px;
 }
 
+/* ---------- Calendar Widget ---------- */
 QCalendarWidget {
     background-color: #212121;
     color: #ebe6e8;
@@ -197,6 +208,7 @@ QCalendarWidget QAbstractItemView {
     border-radius: 10px;
 }
 
+/* ---------- Time Edit ---------- */
 QTimeEdit {
     background-color: #382f33;
     color: #ebe6e8;

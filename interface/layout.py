@@ -2,7 +2,8 @@ from PyQt6.QtWidgets import QPushButton
 from PyQt6.QtGui import QIcon, QFontMetrics
 from PyQt6.QtCore import Qt
 
-# scale font to target width
+
+# ---------- Scale font to target width ----------
 def scale_font_to_width(font, text, target_width):
     lines = text.split("\n")
     size = 1
@@ -17,7 +18,8 @@ def scale_font_to_width(font, text, target_width):
         size += 1
     return f
 
-# scales text size
+
+# ---------- Scale text size ----------
 def scale_text(widget, width, percent=0.7):
     if hasattr(widget, "text_label"):
         text = widget.text_label.text()
@@ -29,11 +31,11 @@ def scale_text(widget, width, percent=0.7):
         return
 
     target_width = int(width * percent)
-    # pass the QFont
     scaled_font = scale_font_to_width(target_widget.font(), text, target_width)
     target_widget.setFont(scaled_font)
 
-# icon & text button
+
+# ---------- Icon & text button ----------
 class IconTextButton(QPushButton):
     def __init__(self, icon_path, text):
         super().__init__()
@@ -44,14 +46,14 @@ class IconTextButton(QPushButton):
         from PyQt6.QtWidgets import QHBoxLayout, QLabel
         self.layout = QHBoxLayout(self)
 
-        # icon
+        # Icon
         self.icon_label = QLabel()
         self.icon = QIcon(icon_path)
         self.icon_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.icon_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.layout.addWidget(self.icon_label)
 
-        # text
+        # Text
         self.text_label = QLabel(text)
         self.text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.text_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -62,12 +64,12 @@ class IconTextButton(QPushButton):
         self.icon_label.setPixmap(self.icon.pixmap(icon_size, icon_size))
 
 
-# scales button text based on the longest label
+# ---------- Scale button text ----------
 def scale_buttons(buttons, left_width):
     if not buttons:
         return
 
-    # find the longest text
+    # Find the longest text
     def get_text(btn):
         if hasattr(btn, "text_label"):
             return btn.text_label.text()
@@ -77,7 +79,7 @@ def scale_buttons(buttons, left_width):
     target_text_width = int(left_width * 0.55)  # 55% of panel
 
     for btn in buttons:
-        # scale font
+        # Scale font
         font = btn.text_label.font() if hasattr(btn, "text_label") else btn.font()
         text_for_scaling = 'W' * max_text_length
         scaled_font = scale_font_to_width(font, text_for_scaling, target_text_width)
@@ -88,6 +90,6 @@ def scale_buttons(buttons, left_width):
         else:
             btn.setFont(scaled_font)
 
-        # fixed size
+        # Fixed size
         btn.setFixedWidth(int(left_width * 0.8))
         btn.setFixedHeight(int(left_width * 0.2))

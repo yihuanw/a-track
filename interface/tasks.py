@@ -1,277 +1,299 @@
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import Qt, QRect, pyqtSignal, QDateTime, QRunnable, QThreadPool, QObject
-from PyQt6.QtGui import QGuiApplication, QPainter, QColor, QFont, QIcon
- 
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
+    QLineEdit, QPushButton, QComboBox, QMessageBox
+)
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QGuiApplication, QFont, QFontMetrics, QIcon, QColor
+
 from . import layout
-import logic
- 
-# ---------------------------------------------------------------------------
-# thin async helper
-# used for db writes that don't need to update the ui on completion
-# ---------------------------------------------------------------------------
-class _Worker(QRunnable):
-    def __init__(self, fn, *args, **kwargs):
-        super().__init__()
-        self._fn = fn
-        self._args = args
-        self._kwargs = kwargs
-        self.setAutoDelete(True)
- 
-    def run(self):
-        try:
-            self._fn(*self._args, **self._kwargs)
-        except Exception as e:
-            print(f"[Worker] error: {e}")
- 
-def _run_async(fn, *args, **kwargs):
-    QThreadPool.globalInstance().start(_Worker(fn, *args, **kwargs))
- 
-# ------------------------------------------------------------------
-class TasksPanel(QWidget):
-    def __init__(self, uid, prefetch_folders=None, prefetch_tasks=None):
-        super().__init__()
- 
-        if not uid:
-            return
-        
-        self.show_completed = True  # default
-        self.selected_deadline = None # default
- 
-        panel_width = QGuiApplication.primaryScreen().geometry().width() * (5/6)
-        panel_height = QGuiApplication.primaryScreen().geometry().height()
- 
-        # calculate rectangle sizes
-        rect_height = int(panel_height * 0.85)  # 85% of panel height
-        rect_width = int(panel_width * 0.9)
-        total_ratio = 1 + 4
-        left_width = int(rect_width * 1 / total_ratio)
-        right_width = int(rect_width * 4 / total_ratio)
- 
-        # main layout
-        main_layout = QHBoxLayout(self)
-        main_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        main_layout.setSpacing(20)
- 
-        # --------------------------- left rectangle ---------------------------
-        
-        # left rectangle
-        self.left_rect = QWidget()
-        self.left_rect.setFixedSize(left_width, rect_height)
-        self.left_rect.setObjectName("tasks_leftRect")
- 
-        left_layout = QVBoxLayout(self.left_rect)
-        left_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
- 
-        # header
-        header = QLabel("FOLDERS")
-        header.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header.setObjectName("tasks_header")
- 
-        layout.scale_text(header, int(left_width * 0.6), 0.7)
-        header_height = header.sizeHint().height()
- 
-        left_layout.addWidget(header)
- 
-        # scrollable list
-        folder_list = QListWidget()
-        folder_list.setFixedHeight(int((rect_height - header_height * 2 - 50)))
-        folder_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        folder_list.setObjectName("tasks_folderList")
- 
-        folders_from_db = prefetch_folders if prefetch_folders is not None else logic.get_folders(uid)
-        colors = [f[2] or QColor(0,0,0,0) for f in folders_from_db]   # folder colors
- 
+from .delegates import CircleDelegate, SimpleSVGCheckDelegate
+import logic_folders
+import logic_tasks
+
+
+# ---------- FolderPanel — lives in the main window's left panel ----------
+class FolderPanel(QWidget):
+    folderSelected = pyqtSignal(str, object)   # (folder_name, folder_id | "All" | None)
+
+    def __init__(self, uid, folders_from_db, colors, left_width,
+                 header_font=None, header_height=None, parent=None):
+        super().__init__(parent)
+        self.uid = uid
+        self.colors = colors
+        self._task_list_ref = None
+        self._dropdown_ref = None
+
+        panel_layout = QVBoxLayout(self)
+        panel_layout.setContentsMargins(10, 0, 10, 0)
+        panel_layout.setSpacing(8)
+
+        _base_font = header_font if header_font is not None else QFont()
+        self.header_height = header_height if header_height is not None else QFontMetrics(_base_font).height()
+
+        # Folder list
+        self.folder_list = QListWidget()
+        self.folder_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.folder_list.setObjectName("tasks_folderList")
+        self.folder_list.setSpacing(3)   # slight spacing between folder items
+
+        font = QFont(_base_font)
+        font.setPointSize(int(_base_font.pointSize() * 0.75))
+        self.folder_list.setFont(font)
+        self.font = font
+
         for name, folder_id, _ in folders_from_db:
             item = QListWidgetItem(name)
             item.setData(Qt.ItemDataRole.UserRole, folder_id)
-            folder_list.addItem(item)
-        
-        font = header.font()
-        font.setPointSize(int(font.pointSize() * 0.75))
-        folder_list.setFont(font)
- 
-        folder_list.setItemDelegate(CircleDelegate(colors, folder_list))
-        left_layout.addWidget(folder_list)
- 
-        # change folder
-        def on_folder_changed():
-            item = folder_list.currentItem()
-            if not item:
-                return
- 
-            folder_name = item.text()
-            folder_id = item.data(Qt.ItemDataRole.UserRole)
- 
-            if folder_name == "All":
-                logic.populate_task_list(task_list, uid, "All", show_completed=self.show_completed)
-                folder_dropdown.clear()
-                for i in range(folder_list.count()):
-                    it = folder_list.item(i)
-                    name = it.text()
-                    fid = it.data(Qt.ItemDataRole.UserRole)
-                    if name not in ["All"]:
-                        folder_dropdown.addItem(name, userData=(fid, colors[i]))
- 
-            elif folder_name == "Uncategorized":
-                logic.populate_task_list(task_list, uid, None, show_completed=self.show_completed)
-                folder_dropdown.clear()
-                folder_dropdown.addItem("Uncategorized", userData=(None, "#ebe6e8"))
- 
-            else:
-                logic.populate_task_list(task_list, uid, folder_id, show_completed=self.show_completed)
-                folder_dropdown.clear()
-                folder_dropdown.addItem(folder_name, userData=(folder_id, colors[folder_list.row(item)]))
- 
-        folder_list.currentRowChanged.connect(lambda _: on_folder_changed())
- 
-        # folder management / right click
-        folder_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        folder_list.customContextMenuRequested.connect(
-            lambda pos: logic.show_folder_menu(
-                folder_list, pos, colors, CircleDelegate, folder_dropdown, uid
+            self.folder_list.addItem(item)
+
+        self.folder_list.setItemDelegate(CircleDelegate(self.colors, self.folder_list))
+        panel_layout.addWidget(self.folder_list, stretch=1)
+
+        # Add folder row
+        folder_input_layout = QHBoxLayout()
+        folder_input_layout.setContentsMargins(10, 0, 10, 0)
+
+        self.folder_input = QLineEdit()
+        self.folder_input.setFixedHeight(self.header_height)
+        self.folder_input.setPlaceholderText("Add folder")
+        self.folder_input.setObjectName("tasks_folderInput")
+        folder_input_layout.addWidget(self.folder_input)
+
+        self.selected_color = "#ebe6e8"
+        self.color_button = QPushButton()
+        self.color_button.setFixedSize(self.header_height, self.header_height)
+        self.color_button.setObjectName("tasks_colorButton")
+        self.color_button.clicked.connect(
+            lambda: logic_tasks.pick_color(
+                lambda c: (setattr(self, "selected_color", c),
+                           self.color_button.setStyleSheet(f"background-color: {c}"))
             )
         )
- 
-        # add folder input
-        folder_input_layout = QHBoxLayout()
-        folder_input = QLineEdit()
-        folder_input.setFixedHeight(header_height)
-        folder_input.setPlaceholderText("Add folder")
-        folder_input.setObjectName("tasks_folderInput")
-        folder_input_layout.addWidget(folder_input)
- 
-        color_button = QPushButton()
-        color_button.setFixedSize(header_height, header_height)
-        color_button.setObjectName("tasks_colorButton")
- 
-        self.selected_color = "#ebe6e8"
-        color_button.clicked.connect(
-            lambda: logic.pick_color(lambda c: setattr(self, "selected_color", c) or color_button.setStyleSheet(f"background-color: {c}"))
-        )
- 
-        folder_input.returnPressed.connect(
-            lambda: logic.add_folder(folder_input, self.selected_color, folder_list, colors, CircleDelegate, folder_dropdown, uid)
-        )
- 
-        folder_input_layout.addWidget(color_button)
-        left_layout.addLayout(folder_input_layout)
- 
-        # --------------------------- right rectangle ---------------------------
- 
-        # right rectangle
-        self.right_rect = QWidget()
-        self.right_rect.setFixedSize(right_width, rect_height)
-        self.right_rect.setObjectName("tasks_rightRect")
- 
-        right_layout = QVBoxLayout(self.right_rect)
-        right_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        left, top, right, bottom = right_layout.getContentsMargins()
-        right_layout.setContentsMargins(left, int(header_height // 2), right, int(header_height // 2))
- 
-        # add task input
+
+        self.folder_input.returnPressed.connect(self._add_folder)
+        folder_input_layout.addWidget(self.color_button)
+        panel_layout.addLayout(folder_input_layout)
+
+        self.folder_list.currentRowChanged.connect(lambda _: self._on_folder_changed())
+        self.folder_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.folder_list.customContextMenuRequested.connect(self._on_context_menu)
+
+    def link(self, task_list, folder_dropdown):
+        self._task_list_ref = task_list
+        self._dropdown_ref = folder_dropdown
+        self.folder_list.setCurrentRow(0)
+
+    def _on_folder_changed(self):
+        item = self.folder_list.currentItem()
+        if not item or not self._task_list_ref:
+            return
+
+        folder_name = item.text()
+        folder_id = item.data(Qt.ItemDataRole.UserRole)
+        show = getattr(self, "_show_completed", True)
+
+        if folder_name == "All":
+            logic_tasks.populate_task_list(self._task_list_ref, self.uid, "All", show_completed=show)
+            if self._dropdown_ref:
+                self._dropdown_ref.clear()
+                for i in range(self.folder_list.count()):
+                    it = self.folder_list.item(i)
+                    if it.text() != "All":
+                        self._dropdown_ref.addItem(
+                            it.text(),
+                            userData=(it.data(Qt.ItemDataRole.UserRole), self.colors[i])
+                        )
+
+        elif folder_name == "Uncategorized":
+            logic_tasks.populate_task_list(self._task_list_ref, self.uid, None, show_completed=show)
+            if self._dropdown_ref:
+                self._dropdown_ref.clear()
+                self._dropdown_ref.addItem("Uncategorized", userData=(None, "#ebe6e8"))
+
+        else:
+            logic_tasks.populate_task_list(self._task_list_ref, self.uid, folder_id, show_completed=show)
+            if self._dropdown_ref:
+                self._dropdown_ref.clear()
+                self._dropdown_ref.addItem(
+                    folder_name,
+                    userData=(folder_id, self.colors[self.folder_list.row(item)])
+                )
+
+        self.folderSelected.emit(folder_name, folder_id)
+
+    def refresh_tasks(self, show_completed):
+        self._show_completed = show_completed
+        self._on_folder_changed()
+
+    def current_folder_id(self):
+        item = self.folder_list.currentItem()
+        if not item:
+            return "All"
+        name = item.text()
+        if name == "All":
+            return "All"
+        if name == "Uncategorized":
+            return None
+        return item.data(Qt.ItemDataRole.UserRole)
+
+    def _add_folder(self):
+        if self._dropdown_ref:
+            logic_folders.add_folder(
+                self.folder_input, self.selected_color,
+                self.folder_list, self.colors,
+                CircleDelegate, self._dropdown_ref, self.uid
+            )
+
+    def _on_context_menu(self, pos):
+        if self._dropdown_ref:
+            logic_folders.show_folder_menu(
+                self.folder_list, pos, self.colors,
+                CircleDelegate, self._dropdown_ref, self.uid
+            )
+
+
+# ---------- TasksPanel — lives in the main window's right panel ----------
+class TasksPanel(QWidget):
+    def __init__(self, uid, folder_panel: FolderPanel,
+                 prefetch_tasks=None, parent=None):
+        super().__init__(parent)
+
+        if not uid:
+            return
+
+        self.uid = uid
+        self.folder_panel = folder_panel
+        self.show_completed = True
+        self.selected_deadline = None
+
+        screen = QGuiApplication.primaryScreen().geometry()
+        panel_w = int(screen.width() * 5 / 6)
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        font = folder_panel.font
+        header_height = folder_panel.header_height
+
+        # ---------- Task input row ----------
         task_input_layout = QHBoxLayout()
         task_input_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
- 
-        add_task_input = QLineEdit() # add task textbox
+        task_input_layout.setContentsMargins(0, int(header_height // 2), 0, 0)
+
+        add_task_input = QLineEdit()
         add_task_input.setPlaceholderText("Add task")
         add_task_input.setFixedHeight(header_height)
-        add_task_input.setFixedWidth(int(right_width * 0.9 * 0.75) - header_height)
         add_task_input.setFont(font)
         add_task_input.setObjectName("tasks_addTaskInput")
- 
-        add_task_input.returnPressed.connect(lambda: logic.add_task(add_task_input, folder_dropdown, task_list, uid, self.selected_deadline))
- 
-        folder_dropdown = QComboBox() # folder selection dropdown
+
+        folder_dropdown = QComboBox()
         folder_dropdown.setFixedHeight(header_height)
-        folder_dropdown.setFixedWidth(int(right_width * 0.9 * 0.25))
         folder_dropdown.setObjectName("tasks_folderDropdown")
- 
-        for folder_name, folder_id, folder_color in folders_from_db:
-            if folder_name not in ["All"]:
-                folder_dropdown.addItem(folder_name, userData=(folder_id, folder_color))
- 
-        deadline_btn = QPushButton() # deadline selection
-        deadline_btn.setIcon(QIcon(logic.path("assets/icon/calendar.png")))
+
+        deadline_btn = QPushButton()
+        deadline_btn.setIcon(QIcon(logic_tasks.path("assets/icon/calendar.png")))
         deadline_btn.setFixedSize(header_height, header_height)
         deadline_btn.setObjectName("tasks_deadlineBtn")
- 
         deadline_btn.clicked.connect(
-            lambda: setattr(self, "selected_deadline", logic.pick_deadline(self))
+            lambda: setattr(self, "selected_deadline", logic_tasks.pick_deadline(self))
         )
- 
-        task_input_layout.addWidget(add_task_input)
+
+        add_task_input.returnPressed.connect(
+            lambda: logic_tasks.add_task(
+                add_task_input, folder_dropdown, task_list, uid, self.selected_deadline
+            )
+        )
+
+        task_input_layout.addWidget(add_task_input, stretch=1)
         task_input_layout.addWidget(folder_dropdown)
         task_input_layout.addWidget(deadline_btn)
-        
-        right_layout.addLayout(task_input_layout)
- 
-        # task checklist
+
+        input_container = QWidget()
+        input_container.setLayout(task_input_layout)
+        input_container.setContentsMargins(
+            int(panel_w * 0.05), int(header_height // 2), int(panel_w * 0.05), 0
+        )
+        main_layout.addWidget(input_container)
+
+        # ---------- Task list ----------
         task_list = QListWidget()
-        task_list.setFixedHeight(int((rect_height - header_height * 2 - 50)))
-        task_list.setFixedWidth(int(right_width * 0.9))
         task_list.setFont(font)
         task_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         task_list.setObjectName("tasks_taskList")
- 
+
         delegate = SimpleSVGCheckDelegate(parent=task_list)
         task_list.setItemDelegate(delegate)
-        folder_list.setCurrentRow(0)
+
         if prefetch_tasks is not None:
-            logic.populate_task_list_from_data(task_list, prefetch_tasks)
+            logic_tasks.populate_task_list_from_data(task_list, prefetch_tasks)
         else:
-            logic.populate_task_list(task_list, uid)
- 
-        def refresh_tasks():
-            if not self.show_completed:
-                current_item = folder_list.currentItem()
-                if not current_item:
-                    return
-                folder_name = current_item.text()
-                folder_id = "All" if folder_name == "All" else None if folder_name == "Uncategorized" else current_item.data(Qt.ItemDataRole.UserRole)
-                logic.populate_task_list(task_list, uid, folder_id, show_completed=self.show_completed)
- 
-        delegate.taskToggled.connect(refresh_tasks)
- 
-        # task management / right click
+            logic_tasks.populate_task_list(task_list, uid)
+
         task_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        task_list.customContextMenuRequested.connect(lambda pos: logic.show_task_menu(task_list, pos, folder_list))
- 
-        right_layout.addWidget(task_list, alignment=Qt.AlignmentFlag.AlignCenter)
- 
-        # show completed button
+        task_list.customContextMenuRequested.connect(
+            lambda pos: logic_tasks.show_task_menu(task_list, pos, folder_panel.folder_list)
+        )
+
+        task_list_container = QWidget()
+        tcl = QVBoxLayout(task_list_container)
+        tcl.setContentsMargins(int(panel_w * 0.05), 8, int(panel_w * 0.05), 0)
+        tcl.addWidget(task_list)
+        main_layout.addWidget(task_list_container, stretch=1)
+
+        # ---------- Bottom buttons ----------
         bottom_btn_layout = QHBoxLayout()
         bottom_btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        show_completed_btn = QPushButton("Hide completed tasks" if self.show_completed else "Show completed tasks")
+        bottom_btn_layout.setContentsMargins(0, 0, 0, 0)
+
+        show_completed_btn = QPushButton(
+            "Hide completed tasks" if self.show_completed else "Show completed tasks"
+        )
         show_completed_btn.setFixedHeight(header_height)
         show_completed_btn.setObjectName("tasks_showCompletedBtn")
         bottom_btn_layout.addWidget(show_completed_btn)
- 
-        def toggle_show_completed():
-            self.show_completed = not self.show_completed
-            show_completed_btn.setText("Hide completed tasks" if self.show_completed else "Show completed tasks")
- 
-            # re-populate task list with current folder
-            current_folder_item = folder_list.currentItem()
-            if not current_folder_item:
-                return
-            folder_name = current_folder_item.text()
-            folder_id = current_folder_item.data(Qt.ItemDataRole.UserRole)
-            if folder_name == "All":
-                folder_id = "All"
-            elif folder_name == "Uncategorized":
-                folder_id = None
-            logic.populate_task_list(task_list, uid, folder_id, show_completed=self.show_completed)
- 
-        show_completed_btn.clicked.connect(toggle_show_completed)
- 
-        # delete completed button
+
         delete_completed_btn = QPushButton("Delete completed tasks")
         delete_completed_btn.setFixedHeight(header_height)
         delete_completed_btn.setObjectName("tasks_deleteCompletedBtn")
         bottom_btn_layout.addWidget(delete_completed_btn)
-        right_layout.addLayout(bottom_btn_layout)
- 
+
+        bottom_container = QWidget()
+        bcl = QVBoxLayout(bottom_container)
+        bcl.setContentsMargins(0, 8, 0, int(header_height // 2))
+        bcl.addLayout(bottom_btn_layout)
+        main_layout.addWidget(bottom_container)
+        main_layout.addStretch()
+
+        # Populate dropdown from folder_panel's list
+        fl = folder_panel.folder_list
+        for i in range(fl.count()):
+            it = fl.item(i)
+            if it.text() != "All":
+                folder_dropdown.addItem(
+                    it.text(),
+                    userData=(it.data(Qt.ItemDataRole.UserRole), folder_panel.colors[i])
+                )
+
+        folder_panel.link(task_list, folder_dropdown)
+
+        # ---------- Callbacks ----------
+        def refresh_tasks():
+            if not self.show_completed:
+                folder_panel.refresh_tasks(self.show_completed)
+
+        delegate.taskToggled.connect(refresh_tasks)
+
+        def toggle_show_completed():
+            self.show_completed = not self.show_completed
+            show_completed_btn.setText(
+                "Hide completed tasks" if self.show_completed else "Show completed tasks"
+            )
+            folder_panel.refresh_tasks(self.show_completed)
+
+        show_completed_btn.clicked.connect(toggle_show_completed)
+
         def delete_completed_tasks_confirm():
             msg = QMessageBox(self)
             msg.setWindowTitle("Delete completed tasks")
@@ -280,178 +302,10 @@ class TasksPanel(QWidget):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel
             )
             msg.setDefaultButton(QMessageBox.StandardButton.Cancel)
-            
             if msg.exec() != QMessageBox.StandardButton.Yes:
                 return
- 
-            current_item = folder_list.currentItem()
-            if not current_item:
-                return
- 
-            folder_name = current_item.text()
-            folder_id = current_item.data(Qt.ItemDataRole.UserRole)
- 
-            if folder_name == "All":
-                folder_id = "All"
-            elif folder_name == "Uncategorized":
-                folder_id = None
- 
-            logic.delete_completed_tasks(uid, folder_id)
-            logic.populate_task_list(
-                task_list, uid, folder_id, show_completed=self.show_completed
-            )
- 
+            folder_id = folder_panel.current_folder_id()
+            logic_tasks.delete_completed_tasks(uid, folder_id)
+            logic_tasks.populate_task_list(task_list, uid, folder_id, show_completed=self.show_completed)
+
         delete_completed_btn.clicked.connect(delete_completed_tasks_confirm)
- 
-        # add to main layout
-        main_layout.addWidget(self.left_rect)
-        main_layout.addWidget(self.right_rect)
- 
-# --------------------------- delegates ---------------------------
- 
-# delegate for bullet circles
-class CircleDelegate(QStyledItemDelegate):
-    def __init__(self, colors, parent=None):
-        super().__init__(parent)
-        self.colors = colors
- 
-    def paint(self, painter, option, index):
-        row = index.row()
-        if row >= len(self.colors):
-            return
- 
-        painter.save()
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
- 
-        # draw the background according to the QSS
-        style = option.widget.style() if option.widget else None
-        if style:
-            style.drawPrimitive(QStyle.PrimitiveElement.PE_PanelItemViewItem, option, painter, option.widget)
- 
-        # circle
-        radius = option.rect.height() * 0.15
-        padding = option.rect.height() * 0.15  # 15% of item height
-        center_x = option.rect.left() + radius + padding
-        center_y = option.rect.center().y()
-        painter.setBrush(QColor(self.colors[row]))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(int(center_x - radius), int(center_y - radius), int(2*radius), int(2*radius))
- 
-        # text
-        text_rect = option.rect.adjusted(int(5*radius), 0, 0, 0)
-        painter.setPen(option.palette.color(option.palette.ColorRole.Text))
-        painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, index.data())
- 
-        painter.restore()
- 
-# delegate for checkmark
-class SimpleSVGCheckDelegate(QStyledItemDelegate):
-    taskToggled = pyqtSignal()
- 
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.cached_checked = {}
-        self.cached_unchecked = {}
- 
-    def get_checkbox_size(self, option):
-        if option.widget:
-            widget = option.widget
-            return int(widget.style().pixelMetric(QStyle.PixelMetric.PM_IndicatorHeight, None, widget) * 1.75)
-        return 24
- 
-    def get_pixmap(self, color, checked=True):
-        cache = self.cached_checked if checked else self.cached_unchecked
-        key = color
-        if key not in cache:
-            path = logic.path("assets/icon/check.svg" if checked else "assets/icon/uncheck.svg")
-            cache[key] = logic.recolor(color, path)
-        return cache[key]
- 
-    def paint(self, painter: QPainter, option, index):
-        state = index.data(Qt.ItemDataRole.CheckStateRole)
-        if state is None:
-            return
- 
-        checkbox_size = self.get_checkbox_size(option)
-        color = index.data(Qt.ItemDataRole.UserRole + 1) or "#ebe6e8"
- 
-        checked = (state == Qt.CheckState.Checked.value)
-        pixmap = self.get_pixmap(color, checked)
- 
-        # draw the background according to the QSS
-        style = option.widget.style() if option.widget else None
-        if style:
-            style.drawPrimitive(QStyle.PrimitiveElement.PE_PanelItemViewItem, option, painter, option.widget)
- 
-        # draw the checkbox
-        y = option.rect.top() + (option.rect.height() - checkbox_size) // 2
-        x = option.rect.left()
-        painter.drawPixmap(x, y, checkbox_size, checkbox_size, pixmap)
- 
-        # draw the text
-        display_text = index.data(Qt.ItemDataRole.DisplayRole)  # task title
-        deadline = index.data(Qt.ItemDataRole.UserRole + 2)     # stored deadline
- 
-        rect = option.rect
-        if display_text:
-            painter.drawText(
-                QRect(rect.left() + checkbox_size + 4, rect.top(), rect.width() // 2, rect.height()),
-                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-                display_text
-            )
- 
-        if deadline:
-            painter.save()
- 
-            # check if deadline passed
-            is_overdue = deadline < QDateTime.currentDateTime()
- 
-            color = QColor("#cf8085" if is_overdue
-                        else option.palette.color(option.palette.ColorRole.Text))
-            color.setAlphaF(0.75)
-            painter.setPen(color)
- 
-            font = option.font
-            font.setWeight(QFont.Weight.Normal)
-            painter.setFont(font)
- 
-            painter.drawText(
-                QRect(rect.left() + rect.width() // 2, rect.top(),
-                    rect.width() // 2 - 4, rect.height()),
-                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
-                deadline.toString("MM/dd/yy HH:mm")
-            )
- 
-            painter.restore()
- 
-    def editorEvent(self, event, model, option, index):
-        if event.type() == event.Type.MouseButtonRelease:
-            checkbox_size = self.get_checkbox_size(option)
-            y = option.rect.top() + (option.rect.height() - checkbox_size) // 2
-            x = option.rect.left()
-            checkbox_rect = QRect(x, y, checkbox_size, checkbox_size)
- 
-            if checkbox_rect.contains(event.pos()):
-                current_state = Qt.CheckState(index.data(Qt.ItemDataRole.CheckStateRole))
-                new_state = (
-                    Qt.CheckState.Unchecked
-                    if current_state == Qt.CheckState.Checked
-                    else Qt.CheckState.Checked
-                )
- 
-                # Update the model immediately — UI responds at once
-                model.setData(index, new_state.value, Qt.ItemDataRole.CheckStateRole)
- 
-                if option.widget:
-                    option.widget.viewport().update(option.rect)
- 
-                # Persist to DB in the background — never blocks the UI thread
-                task_id = index.data(Qt.ItemDataRole.UserRole)
-                if task_id:
-                    is_checked = (new_state == Qt.CheckState.Checked)
-                    _run_async(logic.update_task_completion, task_id, is_checked)
-                    self.taskToggled.emit()
- 
-                return True
- 
-        return super().editorEvent(event, model, option, index)
