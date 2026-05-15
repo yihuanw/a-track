@@ -142,7 +142,11 @@ def populate_task_list(task_list, uid, folder_id="All", show_completed=True):
     else:
         query = query.eq("folder_id", folder_id)
 
-    response = query.execute()
+    try:
+        response = query.execute()
+    except Exception:
+        return
+    
     tasks = []
 
     for row in response.data or []:
@@ -212,6 +216,7 @@ def show_task_menu(task_list, pos, folder_list):
     delete_action = menu.addAction("Delete task")
     change_folder_action = menu.addAction("Change folder")
     change_deadline_action = menu.addAction("Change deadline")
+    remove_deadline_action = menu.addAction("Remove deadline")
     change_title_action = menu.addAction("Change title")
 
     action = menu.exec(task_list.mapToGlobal(pos))
@@ -261,6 +266,14 @@ def show_task_menu(task_list, pos, folder_list):
             "deadline": new_deadline.toUTC().toString(Qt.DateFormat.ISODate)
         }).eq("id", task_id).execute()
         item.setData(Qt.ItemDataRole.UserRole + 2, new_deadline)
+        task_list.viewport().update()
+
+    elif action == remove_deadline_action:
+        task_id = item.data(Qt.ItemDataRole.UserRole)
+        if not task_id:
+            return
+        client.table("tasks").update({"deadline": None}).eq("id", task_id).execute()
+        item.setData(Qt.ItemDataRole.UserRole + 2, None)
         task_list.viewport().update()
 
     elif action == change_title_action:
