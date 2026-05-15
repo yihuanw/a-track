@@ -145,10 +145,21 @@ class FolderPanel(QWidget):
             )
 
     def _on_context_menu(self, pos):
+
+        def refresh_tasks():
+            self.refresh_tasks(
+                getattr(self, "_show_completed", True)
+            )
+
         if self._dropdown_ref:
             logic_folders.show_folder_menu(
-                self.folder_list, pos, self.colors,
-                CircleDelegate, self._dropdown_ref, self.uid
+                self.folder_list,
+                pos,
+                self.colors,
+                CircleDelegate,
+                self._dropdown_ref,
+                self.uid,
+                refresh_tasks_callback=refresh_tasks
             )
 
 
@@ -232,8 +243,20 @@ class TasksPanel(QWidget):
             logic_tasks.populate_task_list(task_list, uid)
 
         task_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        def refresh_current_tasks():
+            folder_panel.refresh_tasks(self.show_completed)
+
+
         task_list.customContextMenuRequested.connect(
-            lambda pos: logic_tasks.show_task_menu(task_list, pos, folder_panel.folder_list)
+            lambda pos: logic_tasks.show_task_menu(
+                task_list=task_list,
+                pos=pos,
+                folder_list=folder_panel.folder_list,
+                uid=uid,
+                current_folder_id=folder_panel.current_folder_id(),
+                show_completed=self.show_completed,
+                refresh_callback=refresh_current_tasks
+            )
         )
 
         task_list_container = QWidget()

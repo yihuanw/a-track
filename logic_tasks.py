@@ -99,16 +99,26 @@ def add_task(add_task_input, folder_dropdown, task_list, uid, deadline_qdt=None)
         return
 
     task_data = response.data[0]
+
+    # Create the task item
     item = QListWidgetItem(task_data["title"])
     item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-    item.setCheckState(
-        Qt.CheckState.Checked if task_data.get("completed") else Qt.CheckState.Unchecked
-    )
+    item.setCheckState(Qt.CheckState.Checked if task_data.get("completed") else Qt.CheckState.Unchecked)
     item.setData(Qt.ItemDataRole.UserRole, task_data["id"])
     item.setData(Qt.ItemDataRole.UserRole + 1, folder_color)
     item.setData(Qt.ItemDataRole.UserRole + 2, deadline_qdt)
 
-    task_list.addItem(item)
+    # Replace placeholder if it's the only item
+    if task_list.count() == 1:
+        first_item = task_list.item(0)
+        if not first_item.flags() & Qt.ItemFlag.ItemIsEnabled:  # this is the placeholder
+            task_list.takeItem(0)
+            task_list.addItem(item)
+        else:
+            task_list.insertItem(0, item)
+    else:
+        task_list.insertItem(0, item)
+
     task_list.viewport().update()
     add_task_input.clear()
 
@@ -158,6 +168,14 @@ def populate_task_list(task_list, uid, folder_id="All", show_completed=True):
 
     tasks.sort(key=lambda x: (x[1] is not None, x[1] or QDateTime()))
 
+    if not tasks:
+        # Add a disabled placeholder item
+        placeholder = QListWidgetItem("No tasks yet")
+        placeholder.setFlags(Qt.ItemFlag.NoItemFlags)
+        placeholder.setForeground(Qt.GlobalColor.gray)
+        task_list.addItem(placeholder)
+        return
+
     for row, deadline_dt in tasks:
         item = QListWidgetItem(row["title"])
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
@@ -169,9 +187,9 @@ def populate_task_list(task_list, uid, folder_id="All", show_completed=True):
         item.setData(Qt.ItemDataRole.UserRole + 2, deadline_dt)
         task_list.addItem(item)
 
-
 def populate_task_list_from_data(task_list, tasks_data, show_completed=True):
     task_list.clear()
+    added = False
     for task_id, title, completed, folder_id, folder_color in tasks_data:
         if not show_completed and completed:
             continue
@@ -182,6 +200,13 @@ def populate_task_list_from_data(task_list, tasks_data, show_completed=True):
         item.setData(Qt.ItemDataRole.UserRole + 1, folder_color)
         item.setData(Qt.ItemDataRole.UserRole + 2, None)
         task_list.addItem(item)
+        added = True
+
+    if not added:
+        placeholder = QListWidgetItem("No tasks yet")
+        placeholder.setFlags(Qt.ItemFlag.NoItemFlags)
+        placeholder.setForeground(Qt.GlobalColor.gray)
+        task_list.addItem(placeholder)
 
 
 def update_task_completion(task_id, completed):
@@ -206,13 +231,30 @@ def delete_completed_tasks(uid, folder_id="All"):
 
 
 # ---------- Task context menu ----------
-def show_task_menu(task_list, pos, folder_list):
+def show_task_menu(
+    task_list,
+    pos,
+    folder_list,
+    uid,
+    current_folder_id,
+    show_completed,
+    refresh_callback
+):
     item = task_list.itemAt(pos)
+
     if not item:
         return
 
+    task_id = item.data(Qt.ItemDataRole.UserRole)
+
+    # Ignore placeholder row
+    if not task_id:
+        return
+
     client = get_client()
+
     menu = QMenu()
+
     delete_action = menu.addAction("Delete task")
     change_folder_action = menu.addAction("Change folder")
     change_deadline_action = menu.addAction("Change deadline")
@@ -221,67 +263,95 @@ def show_task_menu(task_list, pos, folder_list):
 
     action = menu.exec(task_list.mapToGlobal(pos))
 
+    # ---------- DELETE ----------
     if action == delete_action:
-        task_id = item.data(Qt.ItemDataRole.UserRole)
-        if task_id:
-            client.table("tasks").delete().eq("id", task_id).execute()
-        task_list.takeItem(task_list.row(item))
 
+        client.table("tasks") \
+            .delete() \
+            .eq("id", task_id) \
+            .execute()
+
+        refresh_callback()
+
+    # ---------- CHANGE FOLDER ----------
     elif action == change_folder_action:
-        if folder_list is None:
-            return
+
         folders = [
-            (folder_list.item(i).text(), folder_list.item(i).data(Qt.ItemDataRole.UserRole))
+            (
+                folder_list.item(i).text(),
+                folder_list.item(i).data(Qt.ItemDataRole.UserRole)
+            )
             for i in range(folder_list.count())
             if folder_list.item(i).text() != "All"
         ]
+
         if not folders:
             return
 
         choice, ok = QInputDialog.getItem(
-            task_list, "Change Task Folder", "Select new folder:",
-            [f[0] for f in folders], 0, False
+            task_list,
+            "Change Task Folder",
+            "Select new folder:",
+            [f[0] for f in folders],
+            0,
+            False
         )
-        if ok:
-            sel_name, sel_id = next(f for f in folders if f[0] == choice)
-            task_id = item.data(Qt.ItemDataRole.UserRole)
-            if task_id:
-                client.table("tasks").update({"folder_id": sel_id}).eq("id", task_id).execute()
-                for i in range(folder_list.count()):
-                    if folder_list.item(i).text() == sel_name:
-                        delegate = folder_list.itemDelegate()
-                        if delegate and hasattr(delegate, "colors"):
-                            item.setData(Qt.ItemDataRole.UserRole + 1, delegate.colors[i])
-                            task_list.viewport().update()
-                        break
 
+        if ok:
+
+            _, sel_id = next(f for f in folders if f[0] == choice)
+
+            client.table("tasks") \
+                .update({"folder_id": sel_id}) \
+                .eq("id", task_id) \
+                .execute()
+
+            refresh_callback()
+
+    # ---------- CHANGE DEADLINE ----------
     elif action == change_deadline_action:
-        task_id = item.data(Qt.ItemDataRole.UserRole)
-        if not task_id:
-            return
+
         new_deadline = pick_deadline(task_list)
+
         if new_deadline is None:
             return
-        client.table("tasks").update({
-            "deadline": new_deadline.toUTC().toString(Qt.DateFormat.ISODate)
-        }).eq("id", task_id).execute()
-        item.setData(Qt.ItemDataRole.UserRole + 2, new_deadline)
-        task_list.viewport().update()
 
+        client.table("tasks") \
+            .update({
+                "deadline": new_deadline.toUTC().toString(
+                    Qt.DateFormat.ISODate
+                )
+            }) \
+            .eq("id", task_id) \
+            .execute()
+
+        refresh_callback()
+
+    # ---------- REMOVE DEADLINE ----------
     elif action == remove_deadline_action:
-        task_id = item.data(Qt.ItemDataRole.UserRole)
-        if not task_id:
-            return
-        client.table("tasks").update({"deadline": None}).eq("id", task_id).execute()
-        item.setData(Qt.ItemDataRole.UserRole + 2, None)
-        task_list.viewport().update()
 
+        client.table("tasks") \
+            .update({"deadline": None}) \
+            .eq("id", task_id) \
+            .execute()
+
+        refresh_callback()
+
+    # ---------- CHANGE TITLE ----------
     elif action == change_title_action:
+
         new_title, ok = QInputDialog.getText(
-            task_list, "Change Task Title", "New title:", text=item.text()
+            task_list,
+            "Change Task Title",
+            "New title:",
+            text=item.text()
         )
+
         if ok and new_title.strip():
-            task_id = item.data(Qt.ItemDataRole.UserRole)
-            if task_id:
-                client.table("tasks").update({"title": new_title.strip()}).eq("id", task_id).execute()
-            item.setText(new_title.strip())
+
+            client.table("tasks") \
+                .update({"title": new_title.strip()}) \
+                .eq("id", task_id) \
+                .execute()
+
+            refresh_callback()
