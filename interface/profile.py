@@ -17,7 +17,12 @@ class ProfilePanel(QWidget):
         screen = QGuiApplication.primaryScreen().geometry()
         panel_width = int(screen.width() * (5 / 6))
         panel_height = screen.height()
-        self.setFixedSize(panel_width, panel_height)
+        self.setMinimumSize(0, 0)
+
+        self.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding
+        )
 
         # Main container layout
         main_layout = QVBoxLayout(self)

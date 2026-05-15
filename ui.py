@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import QIcon, QGuiApplication
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 
 from interface import layout
@@ -48,7 +48,7 @@ class MainWindow(QWidget):
 
         # ---------- Right Layout ----------
         right_layout = QVBoxLayout(self.right)
-        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setContentsMargins(0, 0, 0, 20)
         right_layout.setSpacing(0)
 
         self.stacked_widget = QStackedWidget()
@@ -86,9 +86,17 @@ class MainWindow(QWidget):
 
     # ---------- Build Panels ----------
     def _build_panels(self, uid):
-        # Remove old TasksPanel if any
-        while self.stacked_widget.count() > 1:
-            self.stacked_widget.removeWidget(self.stacked_widget.widget(1))
+        # Remove all widgets from stacked widget (ProfilePanel and any old TasksPanels)
+        while self.stacked_widget.count() > 0:
+            widget = self.stacked_widget.widget(0)
+            self.stacked_widget.removeWidget(widget)
+            if widget is not self.profile_panel:
+                widget.deleteLater()
+        
+        # Clear the profile_panel reference since it's no longer used
+        if self.profile_panel is not None:
+            self.profile_panel.deleteLater()
+            self.profile_panel = None
 
         # Remove old FolderPanel from left if any
         if self.folder_panel_widget is not None:
@@ -114,9 +122,6 @@ class MainWindow(QWidget):
         self.stacked_widget.setCurrentIndex(1)
         self.logout_button.show()
 
-        # Re-assert maximized geometry after layout changes settle
-        QTimer.singleShot(0, self.showMaximized)
-
     # ---------- Show Tasks Panel ----------
     def show_tasks_panel(self):
         uid = db.get_uid()
@@ -127,12 +132,11 @@ class MainWindow(QWidget):
     # ---------- Handle Logout ----------
     def handle_logout(self):
         db.logout()
-        self.profile_panel.reset_login_form()
         self.logout_button.hide()
 
-        # Remove all panels except login screen
-        while self.stacked_widget.count() > 1:
-            self.stacked_widget.removeWidget(self.stacked_widget.widget(1))
+        # Remove all panels from stacked widget
+        while self.stacked_widget.count() > 0:
+            self.stacked_widget.removeWidget(self.stacked_widget.widget(0))
 
         # Remove folder panel from left side
         if self.folder_panel_widget is not None:
@@ -140,4 +144,8 @@ class MainWindow(QWidget):
             self.folder_panel_widget.deleteLater()
             self.folder_panel_widget = None
 
+        # Recreate and add ProfilePanel for login screen
+        self.profile_panel = ProfilePanel()
+        self.profile_panel.loginSucceeded.connect(self.show_tasks_panel)
+        self.stacked_widget.addWidget(self.profile_panel)
         self.stacked_widget.setCurrentIndex(0)
